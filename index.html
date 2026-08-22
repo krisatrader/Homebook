@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Home E-Book">
+  <meta name="apple-mobile-web-app-title" content="Home E-Book Pro">
   <meta name="theme-color" content="#0f172a">
   <title>Home E-book Pro</title>
 
-  <!-- Külső könyvtárak -->
+  <!-- JSZip, ePubJS és PDF.js a dokumentumok kibontásához -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/epubjs/dist/epub.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
@@ -74,7 +74,6 @@
 </head>
 <body class="bg-slate-900 text-slate-100 font-sans h-screen flex flex-col overflow-hidden transition-colors duration-300 dark" id="app-body">
 
-  <!-- FEJLÉC -->
   <header class="pt-[calc(var(--sat)+0.5rem)] pb-2.5 px-4 bg-slate-800/80 backdrop-blur-md border-b border-slate-700/50 flex items-center justify-between z-30 shrink-0">
     <div class="flex items-center gap-2">
       <button onclick="toggleDrawer()" class="w-9 h-9 rounded-lg bg-slate-700/50 text-slate-300 hover:text-white flex items-center justify-center text-base active:scale-95 transition" title="Menü és tartalomjegyzék">
@@ -88,7 +87,6 @@
       </h1>
     </div>
 
-    <!-- Fejléc gombok -->
     <div class="flex items-center gap-1.5">
       <button onclick="toggleSearchModal()" class="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-slate-700/50 text-slate-300 hover:text-white flex items-center justify-center text-sm active:scale-95 transition" title="Keresés a könyvben">
         🔍
@@ -105,13 +103,12 @@
     </div>
   </header>
 
-  <!-- OLVASÁSI HALADÁSI SÁV -->
+  <!-- HALADÁSI SÁV -->
   <div class="w-full bg-slate-800 h-1 shrink-0">
     <div id="reading-progress-bar" class="bg-indigo-500 h-full w-0 transition-all duration-150"></div>
   </div>
 
-  <!-- FŐ OLVASÓ FELÜLET -->
-  <main class="flex-1 overflow-y-auto px-4 sm:px-8 py-6 reader-selectable relative" id="reader-container" onscroll="updateReadingProgress()">
+  <main class="flex-1 overflow-y-auto px-4 sm:px-8 py-6 reader-selectable relative" id="reader-container" onscroll="throttledScrollProgress()">
     <div class="max-w-2xl mx-auto space-y-5 pb-32" id="reader-content">
       <!-- Tartalom töltődik ide -->
     </div>
@@ -132,7 +129,6 @@
     Értesítés
   </div>
 
-  <!-- FOLYAMAT INDIKÁTOR MODAL -->
   <div id="progress-modal" class="fixed inset-0 bg-black/75 backdrop-blur-md z-50 opacity-0 pointer-events-none transition-opacity duration-300 flex items-center justify-center p-4">
     <div class="bg-slate-800 border border-slate-700 w-full max-w-sm rounded-3xl p-6 text-center space-y-4 shadow-2xl">
       <div id="progress-spinner" class="w-12 h-12 border-4 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin mx-auto"></div>
@@ -146,7 +142,6 @@
     </div>
   </div>
 
-  <!-- CONFIRM MODAL -->
   <div id="confirm-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 opacity-0 pointer-events-none transition-opacity duration-300 flex items-center justify-center p-4">
     <div class="bg-slate-800 border border-slate-700 w-full max-w-xs rounded-2xl p-5 space-y-4 shadow-2xl text-center">
       <h3 id="confirm-modal-text" class="text-xs font-bold text-slate-200">Biztosan folytatod?</h3>
@@ -157,7 +152,6 @@
     </div>
   </div>
 
-  <!-- JEGYZET MODAL -->
   <div id="note-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 opacity-0 pointer-events-none transition-opacity duration-300 flex items-center justify-center p-4">
     <div class="bg-slate-800 border border-slate-700 w-full max-w-sm rounded-2xl p-5 space-y-3 shadow-2xl">
       <h3 class="text-xs font-bold text-slate-300 uppercase">Jegyzet hozzáadása</h3>
@@ -170,7 +164,6 @@
     </div>
   </div>
 
-  <!-- FORDÍTÁS EREDMÉNY MODAL -->
   <div id="translation-result-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 opacity-0 pointer-events-none transition-opacity duration-300 flex items-center justify-center p-4">
     <div class="bg-slate-800 border border-slate-700 w-full max-w-md rounded-2xl p-5 space-y-3 shadow-2xl">
       <h3 class="text-xs font-bold text-emerald-400 uppercase tracking-wider">🇭🇺 Szakasz Fordítása</h3>
@@ -194,22 +187,17 @@
   <div id="library-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 opacity-0 pointer-events-none transition-opacity duration-300 flex items-center justify-center p-3 sm:p-6">
     <div class="bg-slate-800 border border-slate-700 w-full max-w-2xl h-[85vh] rounded-3xl p-5 flex flex-col gap-4 shadow-2xl">
       
-      <!-- Modal Fejléc -->
       <div class="flex items-center justify-between border-b border-slate-700 pb-3">
         <h2 class="font-bold text-base text-white flex items-center gap-2">📚 Könyvtáram</h2>
         <button onclick="toggleLibraryModal()" class="w-8 h-8 rounded-full bg-slate-700 text-slate-400 flex items-center justify-center hover:text-white">✕</button>
       </div>
 
-      <!-- Mappa Lapfülek -->
       <div class="flex border-b border-slate-700 text-xs font-semibold overflow-x-auto">
         <button onclick="switchLibraryTab('my-books')" id="lib-tab-my" class="px-4 py-2 text-indigo-400 border-b-2 border-indigo-500 shrink-0">📱 iPhone Könyveim</button>
         <button onclick="switchLibraryTab('translated-books')" id="lib-tab-translated" class="px-4 py-2 text-slate-400 shrink-0">🇭🇺 Fordított Könyvek</button>
       </div>
 
-      <!-- SAJÁT KÖNYVEK MAPPA -->
       <div id="lib-content-my" class="flex-1 overflow-y-auto space-y-3 pr-1">
-        
-        <!-- iPhone Mappa Helye es Biztonsagi Mentes Kezelo -->
         <div class="p-3 bg-slate-900/90 border border-slate-700/80 rounded-2xl space-y-3">
           <div>
             <label class="block text-[11px] font-bold text-indigo-300 uppercase tracking-wider mb-1">📂 Saját Mappa Neve iPhone-on:</label>
@@ -222,7 +210,6 @@
             </div>
           </div>
 
-          <!-- BIZTONSÁGI MENTÉS (EXPORT / IMPORT) -->
           <div class="pt-2 border-t border-slate-800/80 flex items-center justify-between gap-2">
             <span class="text-[10px] text-slate-400 font-semibold">Biztonsági mentés elmentése az iPhone-ra:</span>
             <div class="flex gap-1.5">
@@ -242,7 +229,6 @@
         </div>
       </div>
 
-      <!-- FORDÍTOTT KÖNYVEK MAPPA -->
       <div id="lib-content-translated" class="flex-1 overflow-y-auto space-y-3 pr-1 hidden">
         <!-- Fordított könyvek kártyái -->
       </div>
@@ -250,7 +236,6 @@
     </div>
   </div>
 
-  <!-- OLDALMENÜ / DRAWER -->
   <div id="drawer" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 opacity-0 pointer-events-none transition-opacity duration-300 flex">
     <div class="bg-slate-800 border-r border-slate-700 w-4/5 max-w-xs h-full p-5 flex flex-col gap-4 transform -translate-x-full transition-transform duration-300 shadow-2xl" id="drawer-panel">
       <div class="flex items-center justify-between border-b border-slate-700 pb-3">
@@ -271,7 +256,6 @@
     <div class="flex-1" onclick="toggleDrawer()"></div>
   </div>
 
-  <!-- KERESŐ MODAL (Belső) -->
   <div id="search-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 opacity-0 pointer-events-none transition-opacity duration-300 flex items-start justify-center p-4 pt-20">
     <div class="bg-slate-800 border border-slate-700 w-full max-w-md rounded-2xl p-4 space-y-3 shadow-2xl">
       <div class="flex items-center justify-between">
@@ -283,7 +267,6 @@
     </div>
   </div>
 
-  <!-- ALSÓ WEBSPEECH TTS LEJÁTSZÓ BAR + FEJEZETVÁLTÓ -->
   <div class="fixed bottom-0 left-0 right-0 p-3 pb-[calc(var(--sab)+0.75rem)] bg-slate-800/90 backdrop-blur-lg border-t border-slate-700/60 z-30 flex items-center justify-between gap-3 shadow-2xl">
     
     <div class="flex items-center gap-1.5 shrink-0">
@@ -302,7 +285,7 @@
 
     <div class="min-w-0 flex-1">
       <div class="flex items-center justify-between">
-        <span id="tts-status" class="text-[10px] font-bold text-indigo-400 uppercase tracking-wider truncate">Magyar Felolvasó</span>
+        <span id="tts-status" class="text-[10px] font-bold text-indigo-400 uppercase tracking-wider truncate">🔊 Magyar Felolvasó</span>
         <span id="reading-percentage" class="text-[10px] text-slate-400 shrink-0 ml-1">0%</span>
       </div>
       <div id="tts-current-sentence" class="text-xs text-slate-300 truncate font-serif italic">
@@ -311,15 +294,35 @@
     </div>
 
     <div class="flex items-center gap-1.5 shrink-0">
-      <button onclick="changeTTSSpeed()" id="btn-speed" class="px-2 py-1.5 rounded-lg bg-slate-700 text-xs font-bold text-slate-300 hover:bg-slate-600 active:scale-95 transition" title="Felolvasási sebesség">
+      <button onclick="toggleSleepTimerModal()" id="btn-sleep-timer" class="px-2 py-1.5 rounded-lg bg-slate-700 text-xs font-bold text-slate-300 hover:bg-slate-600 active:scale-95 transition flex items-center gap-1" title="Elalvási időzítő">
+        🌙 <span id="lbl-sleep-timer-btn">Ki</span>
+      </button>
+
+      <button onclick="changeTTSSpeedShortcut()" id="btn-speed" class="px-2 py-1.5 rounded-lg bg-slate-700 text-xs font-bold text-slate-300 hover:bg-slate-600 active:scale-95 transition" title="Felolvasási sebesség">
         1.0x
       </button>
     </div>
   </div>
 
-  <!-- BEÁLLÍTÁSOK MODAL -->
+  <div id="sleep-timer-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 opacity-0 pointer-events-none transition-opacity duration-300 flex items-center justify-center p-4">
+    <div class="bg-slate-800 border border-slate-700 w-full max-w-xs rounded-2xl p-5 space-y-4 shadow-2xl text-center">
+      <h3 class="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center justify-center gap-1.5">
+        <span>🌙</span> Elalvási Időzítő
+      </h3>
+      <div class="grid grid-cols-2 gap-2 text-xs">
+        <button onclick="setSleepTimer(0)" class="py-2 bg-slate-900 border border-slate-700 hover:border-indigo-500 rounded-xl font-semibold">Kikapcsolva</button>
+        <button onclick="setSleepTimer(5)" class="py-2 bg-slate-900 border border-slate-700 hover:border-indigo-500 rounded-xl font-semibold">5 perc</button>
+        <button onclick="setSleepTimer(15)" class="py-2 bg-slate-900 border border-slate-700 hover:border-indigo-500 rounded-xl font-semibold">15 perc</button>
+        <button onclick="setSleepTimer(30)" class="py-2 bg-slate-900 border border-slate-700 hover:border-indigo-500 rounded-xl font-semibold">30 perc</button>
+        <button onclick="setSleepTimer(45)" class="py-2 bg-slate-900 border border-slate-700 hover:border-indigo-500 rounded-xl font-semibold">45 perc</button>
+        <button onclick="setSleepTimer('chapter')" class="py-2 bg-slate-900 border border-slate-700 hover:border-indigo-500 rounded-xl font-semibold">Fejezet végén</button>
+      </div>
+      <button onclick="toggleSleepTimerModal()" class="w-full py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-xl text-xs font-semibold transition">Bezárás</button>
+    </div>
+  </div>
+
   <div id="settings-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 opacity-0 pointer-events-none transition-opacity duration-300 flex items-end sm:items-center justify-center p-0 sm:p-4">
-    <div class="bg-slate-800 border-t sm:border border-slate-700 w-full max-w-md rounded-t-3xl sm:rounded-2xl p-6 space-y-5 transform translate-y-full sm:translate-y-0 transition-transform duration-300 shadow-2xl" id="settings-sheet">
+    <div class="bg-slate-800 border-t sm:border border-slate-700 w-full max-w-md rounded-t-3xl sm:rounded-2xl p-6 space-y-5 transform translate-y-full sm:translate-y-0 transition-transform duration-300 shadow-2xl max-h-[90vh] overflow-y-auto" id="settings-sheet">
       
       <div class="flex items-center justify-between border-b border-slate-700 pb-3">
         <h2 class="text-sm font-bold text-white flex items-center gap-2">⚙️ Olvasó Beállítások</h2>
@@ -356,21 +359,42 @@
         </div>
       </div>
 
+      <div class="p-3 bg-slate-900 border border-slate-700/80 rounded-2xl space-y-3">
+        <label class="block text-[11px] font-bold text-indigo-300 uppercase tracking-wider">🎙️ Felolvasó Paraméterek</label>
+        
+        <div class="space-y-1">
+          <div class="flex justify-between text-[11px] font-bold text-slate-400 uppercase">
+            <span>Beszédsebesség</span> <span id="lbl-tts-speed">1.0x</span>
+          </div>
+          <input type="range" min="0.5" max="2.0" step="0.05" value="1.0" id="slider-tts-speed" oninput="updateTTSSpeedParam(this.value)" class="w-full accent-indigo-500 bg-slate-700 h-1.5 rounded-lg appearance-none cursor-pointer">
+        </div>
+
+        <div class="space-y-1 pt-1">
+          <div class="flex justify-between text-[11px] font-bold text-slate-400 uppercase">
+            <span>Mondatok közötti szünet</span> <span id="lbl-tts-delay">0.0 mp</span>
+          </div>
+          <input type="range" min="0" max="3.0" step="0.2" value="0.0" id="slider-tts-delay" oninput="updateTTSDelayParam(this.value)" class="w-full accent-indigo-500 bg-slate-700 h-1.5 rounded-lg appearance-none cursor-pointer">
+        </div>
+      </div>
+
       <div class="space-y-1.5">
-        <label class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Magyar TTS Hang</label>
-        <select id="select-voice" onchange="changeVoice(this.value)" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500">
-          <option value="">Keresés...</option>
+        <label class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Felolvasó Motor Választás</label>
+        <select id="select-edge-voice" onchange="changeEdgeVoice(this.value)" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500">
+          <option value="gtts-hu">🌐 Google Translate TTS (gTTS Online)</option>
         </select>
+        <p class="text-[10px] text-slate-400 mt-1">📱 Az iPhone saját magyar hangjai automatikusan hozzáadódnak a fenti listához.</p>
       </div>
 
     </div>
   </div>
 
-  <!-- JAVASCRIPT LOGIKA -->
   <script>
-    // INDEXEDDB HELYI ADATBÁZIS A KÖNYVEK HOSSZÚ TÁVÚ MEGŐRZÉSÉHEZ
-    const DB_NAME = 'HomeEbookDB_v4';
+    const DB_NAME = 'HomeEbookDB_v16';
     const DB_VERSION = 1;
+
+    // ELKERÜLHETETLEN iOS GC VÉDELEM: Globális hivatkozások a böngészős leállások kivédésére
+    window.activeUtterance = null;
+    window.speechWatchdog = null;
 
     function openLocalDB() {
       return new Promise((resolve, reject) => {
@@ -391,9 +415,7 @@
         const db = await openLocalDB();
         const tx = db.transaction('books', 'readwrite');
         tx.objectStore('books').put(bookObj);
-      } catch(e) {
-        console.warn("Local DB mentési hiba:", e);
-      }
+      } catch(e) {}
     }
 
     async function dbLoadAllBooks() {
@@ -426,7 +448,6 @@
       } catch(e) {}
     }
 
-    // ALAPÉRTELMEZETT MINTA KÖNYVEK
     const SAMPLE_BOOKS = [
       {
         id: 'sample-1',
@@ -450,7 +471,6 @@
       }
     ];
 
-    // ÁLLAPOT
     let myLibrary = [];
     let currentBookId = 'sample-1';
     let book = { id: "", title: "", author: "", chapters: [], paragraphs: [], lastSeenPIdx: 0 };
@@ -466,21 +486,29 @@
     let currentFontFamily = 'serif';
     let currentTheme = 'dark';
 
+    let selectedEdgeVoice = localStorage.getItem('ebook_edge_voice') || 'gtts-hu';
+    let sentenceDelay = parseFloat(localStorage.getItem('ebook_sentence_delay') || '0.0');
+
     let synth = window.speechSynthesis;
-    let huVoices = [];
-    let selectedVoice = null;
+    let nativeVoicesList = [];
     let isSpeaking = false;
     let ttsSentences = [];
     let currentSentenceIdx = 0;
-    let ttsRate = 1.0;
-
-    let currentUtterance = null;
-    let ttsKeepAliveTimer = null;
+    let ttsRate = parseFloat(localStorage.getItem('ebook_tts_rate') || '1.0');
+    
+    let globalAudioPlayer = new Audio();
+    let playbackSafetyTimeout = null;
+    let scrollThrottleTimeout = null;
     let saveTimeout = null;
+    let isProgrammaticScroll = false;
 
-    // INICIALIZÁLÁS
+    // ELALVÁSI IDŐZÍTŐ
+    let sleepTimerMinutes = 0;
+    let sleepTimerInterval = null;
+    let sleepTimerSecondsRemaining = 0;
+
     window.addEventListener('DOMContentLoaded', async () => {
-      initTTS();
+      populateNativeVoices();
       loadStoredSettings();
       loadStoredFolderName();
       setupSelectionListener();
@@ -497,7 +525,55 @@
       loadBookFromLibrary(myLibrary.some(b => b.id === activeId) ? activeId : myLibrary[0].id);
     });
 
-    // TOAST ÉRTSÍTÉSEK
+    // ÉSZREVÉTLENÜL KILISTÁZZA ÉS RANGSOROLJA AZ IPHONE LEGJOBB MAGYAR HANGJAIT
+    function populateNativeVoices() {
+      const updateVoiceDropdown = () => {
+        const voices = synth.getVoices();
+        const huVoices = voices.filter(v => v.lang && v.lang.toLowerCase().includes('hu'));
+        
+        huVoices.sort((a, b) => {
+          const score = (v) => 
+            (v.name.includes('Premium') ? 5 : 0) + 
+            (v.name.includes('Enhanced') ? 4 : 0) + 
+            (v.name.includes('Fokozott') ? 4 : 0) + 
+            (v.name.includes('Siri') ? 3 : 0);
+          return score(b) - score(a);
+        });
+
+        nativeVoicesList = huVoices;
+        const select = document.getElementById('select-edge-voice');
+        if (!select) return;
+
+        while (select.options.length > 1) {
+          select.remove(1);
+        }
+
+        huVoices.forEach((v, idx) => {
+          const opt = document.createElement('option');
+          opt.value = `native-${idx}`;
+          opt.innerText = `📱 iPhone: ${v.name} (${v.lang})`;
+          select.appendChild(opt);
+        });
+
+        if (selectedEdgeVoice.startsWith('native-')) {
+          select.value = selectedEdgeVoice;
+        }
+      };
+
+      updateVoiceDropdown();
+      if (speechSynthesis.onvoiceschanged !== undefined) {
+        speechSynthesis.onvoiceschanged = updateVoiceDropdown;
+      }
+    }
+
+    function getSelectedNativeVoiceObj() {
+      if (selectedEdgeVoice.startsWith('native-')) {
+        const idx = parseInt(selectedEdgeVoice.replace('native-', ''));
+        return nativeVoicesList[idx] || nativeVoicesList[0];
+      }
+      return nativeVoicesList[0] || null;
+    }
+
     function showToast(msg) {
       const toast = document.getElementById('toast-notification');
       if (!toast) return;
@@ -508,7 +584,6 @@
       }, 2500);
     }
 
-    // CONFIRM MODAL
     let confirmCallback = null;
     function showConfirm(msg, callback) {
       const modal = document.getElementById('confirm-modal');
@@ -528,7 +603,6 @@
       confirmCallback = null;
     }
 
-    // BIZTONSÁGI MENTÉS (EXPORT / IMPORT)
     function exportBackupToFile() {
       if (!myLibrary || myLibrary.length === 0) {
         showToast("Nincs menthető könyv.");
@@ -552,7 +626,7 @@
 
       const a = document.createElement('a');
       a.href = url;
-      a.download = `homebook_biztonsagi_mentes_${new Date().toISOString().slice(0, 10)}.json`;
+      a.download = `homebook_mentes_${new Date().toISOString().slice(0, 10)}.json`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -593,15 +667,9 @@
         if (data.highlights) highlights = data.highlights;
         if (data.notes) notes = data.notes;
 
-        const activeId = data.activeBookId && myLibrary.some(b => b.id === data.activeBookId) 
-          ? data.activeBookId 
-          : myLibrary[0].id;
-
-        updateProgress("Könyvek betöltése...", 90);
-        loadBookFromLibrary(activeId);
-
         hideProgress();
         renderMyBookshelf('my-books');
+        toggleLibraryModal();
         showToast("Sikeresen visszaállítva!");
 
       } catch (e) {
@@ -612,7 +680,6 @@
       event.target.value = '';
     }
 
-    // MAPPA NÉV MENTÉS ÉS BEÁLLÍTÁS
     function loadStoredFolderName() {
       const saved = localStorage.getItem('ebook_folder_name');
       if (saved) {
@@ -640,10 +707,9 @@
         }
         localStorage.setItem('ebook_active_book_id', book.id);
         await dbSaveBook(book);
-      }, 300);
+      }, 200);
     }
 
-    // FOLYAMAT INDIKÁTOR
     function showProgress(title, status, percent = 0) {
       const modal = document.getElementById('progress-modal');
       document.getElementById('progress-title').innerText = title;
@@ -663,6 +729,7 @@
     }
 
     function loadBookFromLibrary(bookId) {
+      saveReadingProgressToLocal();
       const found = myLibrary.find(b => b.id === bookId);
       if (found) {
         currentBookId = bookId;
@@ -670,55 +737,17 @@
         lastSeenPIdx = book.lastSeenPIdx || 0;
         document.getElementById('app-title').innerText = book.title;
         localStorage.setItem('ebook_active_book_id', bookId);
+        
         renderBook();
-        
-        setTimeout(() => {
-          scrollToParagraph(lastSeenPIdx, false);
-        }, 150);
-      }
-    }
-
-    function initTTS() {
-      const updateVoices = () => {
-        const voices = synth.getVoices();
-        huVoices = voices.filter(v => v.lang.includes('hu') || v.lang.includes('HU'));
-        
-        const select = document.getElementById('select-voice');
-        select.innerHTML = '';
-
-        if (huVoices.length > 0) {
-          selectedVoice = huVoices.find(v => v.name.includes('Siri') || v.name.includes('Mariska') || v.name.includes('Google') || v.name.includes('Natural')) || huVoices[0];
-          
-          huVoices.forEach((v, idx) => {
-            const opt = document.createElement('option');
-            opt.value = idx;
-            opt.innerText = `${v.name} (${v.lang})`;
-            if (v === selectedVoice) opt.selected = true;
-            select.appendChild(opt);
-          });
-        } else {
-          const opt = document.createElement('option');
-          opt.innerText = "Alapértelmezett magyar (hu-HU)";
-          select.appendChild(opt);
-        }
-      };
-
-      updateVoices();
-      if (speechSynthesis.onvoiceschanged !== undefined) {
-        speechSynthesis.onvoiceschanged = updateVoices;
-      }
-    }
-
-    function changeVoice(idx) {
-      if (huVoices[idx]) {
-        selectedVoice = huVoices[idx];
-        if (isSpeaking) speakSentence(true);
+        scrollToParagraph(lastSeenPIdx, false, true);
       }
     }
 
     function renderBook() {
       const container = document.getElementById('reader-content');
       container.innerHTML = '';
+
+      const fragment = document.createDocumentFragment();
 
       book.paragraphs.forEach((pText, idx) => {
         const p = document.createElement('p');
@@ -729,7 +758,7 @@
         
         p.onclick = () => {
           if (window.getSelection().toString().trim().length === 0) {
-            scrollToParagraph(idx);
+            scrollToParagraph(idx, true, true);
           }
         };
 
@@ -739,15 +768,15 @@
         }
 
         p.innerText = pText;
-        container.appendChild(p);
+        fragment.appendChild(p);
       });
 
+      container.appendChild(fragment);
+
       prepareTTSData();
-      updateReadingProgress();
       renderDrawerContent('toc');
     }
 
-    // EPUB / TXT / PDF FELTÖLTÉS IPHONE EBOOK MAP PÁBÓL
     async function handleFileUpload(event) {
       const files = Array.from(event.target.files);
       if (!files || files.length === 0) return;
@@ -821,8 +850,11 @@
       }
 
       hideProgress();
-      toggleLibraryModal();
-      showToast("Könyv sikeresen elmentve!");
+      renderMyBookshelf('my-books');
+      
+      const modal = document.getElementById('library-modal');
+      modal.classList.remove('opacity-0', 'pointer-events-none');
+      showToast("Könyv elmentve a Könyvespolcra!");
     }
 
     async function addBookToLibrary(title, author, paragraphs, chapters, isTranslated = false) {
@@ -839,11 +871,10 @@
 
       myLibrary.unshift(newBook);
       await dbSaveBook(newBook);
-      loadBookFromLibrary(newBook.id);
     }
 
-    // FORDÍTÁS
     async function translateCurrentContent() {
+      saveReadingProgressToLocal();
       const total = book.paragraphs.length;
       if (total === 0) return;
 
@@ -874,12 +905,14 @@
         const translatedTitle = book.title.startsWith('[HU]') ? book.title : `[HU] ${book.title}`;
         await addBookToLibrary(translatedTitle, book.author, translatedParagraphs, translatedChapters, true);
 
-        updateProgress("Fordítás elmentve a Fordított könyvtárba!", 100);
+        updateProgress("Fordítás elmentve!", 100);
         setTimeout(() => {
           hideProgress();
-          toggleLibraryModal();
+          renderMyBookshelf('translated-books');
           switchLibraryTab('translated-books');
-        }, 1200);
+          const modal = document.getElementById('library-modal');
+          modal.classList.remove('opacity-0', 'pointer-events-none');
+        }, 800);
 
       } catch (e) {
         hideProgress();
@@ -888,6 +921,7 @@
     }
 
     function toggleLibraryModal() {
+      saveReadingProgressToLocal();
       const modal = document.getElementById('library-modal');
       if (modal.classList.contains('opacity-0')) {
         modal.classList.remove('opacity-0', 'pointer-events-none');
@@ -966,7 +1000,7 @@
           </div>
 
           <div class="flex justify-end gap-2 pt-2 border-t border-slate-800">
-            ${isCurrent ? '<span class="text-xs text-indigo-400 font-semibold self-center">Nyitva</span>' : `<button onclick="loadBookFromLibrary('${b.id}'); toggleLibraryModal();" class="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold">Olvasás</button>`}
+            <button onclick="loadBookFromLibrary('${b.id}'); toggleLibraryModal();" class="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold">Olvasás</button>
             <button onclick="deleteBookFromLibrary('${b.id}', '${tab}')" class="px-2 py-1 text-rose-400 hover:bg-rose-500/20 rounded-lg text-xs">🗑️</button>
           </div>
         `;
@@ -989,15 +1023,6 @@
         renderMyBookshelf(tab);
         showToast("Könyv törölve.");
       });
-    }
-
-    function escapeHtml(str) {
-      if (!str) return '';
-      return str.replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;')
-                .replace(/'/g, '&#39;');
     }
 
     function setupSelectionListener() {
@@ -1095,7 +1120,17 @@
       showToast("Könyvjelző törölve.");
     }
 
+    function throttledScrollProgress() {
+      if (isProgrammaticScroll) return;
+      if (scrollThrottleTimeout) return;
+      scrollThrottleTimeout = setTimeout(() => {
+        updateReadingProgress();
+        scrollThrottleTimeout = null;
+      }, 120);
+    }
+
     function updateReadingProgress() {
+      if (isProgrammaticScroll) return;
       const container = document.getElementById('reader-container');
       const progress = (container.scrollTop / (container.scrollHeight - container.clientHeight)) * 100;
       const rounded = Math.min(100, Math.max(0, Math.round(progress || 0)));
@@ -1126,9 +1161,9 @@
       if (!book.chapters || book.chapters.length === 0) return;
       let currentChIdx = book.chapters.findIndex(ch => lastSeenPIdx >= ch.startP && lastSeenPIdx <= ch.endP);
       if (currentChIdx > 0) {
-        scrollToParagraph(book.chapters[currentChIdx - 1].startP);
+        scrollToParagraph(book.chapters[currentChIdx - 1].startP, true, true);
       } else {
-        scrollToParagraph(book.chapters[0].startP);
+        scrollToParagraph(book.chapters[0].startP, true, true);
       }
     }
 
@@ -1136,18 +1171,34 @@
       if (!book.chapters || book.chapters.length === 0) return;
       let currentChIdx = book.chapters.findIndex(ch => lastSeenPIdx >= ch.startP && lastSeenPIdx <= ch.endP);
       if (currentChIdx !== -1 && currentChIdx < book.chapters.length - 1) {
-        scrollToParagraph(book.chapters[currentChIdx + 1].startP);
+        scrollToParagraph(book.chapters[currentChIdx + 1].startP, true, true);
       }
     }
 
-    function scrollToParagraph(pIdx, save = true) {
+    // PONTOS ÉS AZONNALI UGRÁS
+    function scrollToParagraph(pIdx, save = true, instant = true) {
       const target = document.getElementById(`para-${pIdx}`);
-      if (target) {
-        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const container = document.getElementById('reader-container');
+      
+      if (target && container) {
+        isProgrammaticScroll = true;
+        
+        if (instant) {
+          const containerRect = container.getBoundingClientRect();
+          const targetRect = target.getBoundingClientRect();
+          container.scrollTop = container.scrollTop + (targetRect.top - containerRect.top) - 10;
+        } else {
+          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
         lastSeenPIdx = pIdx;
         book.lastSeenPIdx = pIdx;
         if (save) saveReadingProgressToLocal();
         syncTTSToParagraph(pIdx);
+
+        setTimeout(() => {
+          isProgrammaticScroll = false;
+        }, 200);
       }
     }
 
@@ -1161,7 +1212,7 @@
         document.getElementById('tts-status').innerText = `Ugrás ide: ${currentSentenceIdx + 1}/${ttsSentences.length}`;
 
         if (isSpeaking) {
-          speakSentence(true);
+          speakSentence();
         } else {
           highlightTTSSentence(item);
         }
@@ -1173,13 +1224,136 @@
       currentSentenceIdx = 0;
 
       book.paragraphs.forEach((p, pIdx) => {
-        const matches = p.match(/[^.!?]+[.!?]+/g) || [p];
-        matches.forEach(s => {
-          if (s.trim().length > 0) {
-            ttsSentences.push({ text: s.trim(), pIdx });
+        const rawSentences = p.match(/[^.!?]+[.!?]+/g) || [p];
+        rawSentences.forEach(s => {
+          const trimmed = s.trim();
+          if (trimmed.length > 0) {
+            if (trimmed.length <= 110) {
+              ttsSentences.push({ text: trimmed, pIdx });
+            } else {
+              const subChunks = splitLongTextIntoChunks(trimmed, 110);
+              subChunks.forEach(chunk => {
+                ttsSentences.push({ text: chunk, pIdx });
+              });
+            }
           }
         });
       });
+    }
+
+    function splitLongTextIntoChunks(text, maxLength) {
+      const chunks = [];
+      let remaining = text;
+
+      while (remaining.length > 0) {
+        if (remaining.length <= maxLength) {
+          chunks.push(remaining);
+          break;
+        }
+
+        let splitIdx = remaining.lastIndexOf(',', maxLength);
+        if (splitIdx === -1 || splitIdx < 25) {
+          splitIdx = remaining.lastIndexOf(' ', maxLength);
+        }
+        if (splitIdx === -1 || splitIdx < 25) {
+          splitIdx = maxLength;
+        }
+
+        chunks.push(remaining.substring(0, splitIdx).trim());
+        remaining = remaining.substring(splitIdx).trim();
+      }
+
+      return chunks;
+    }
+
+    function toggleSleepTimerModal() {
+      const modal = document.getElementById('sleep-timer-modal');
+      if (modal.classList.contains('opacity-0')) {
+        modal.classList.remove('opacity-0', 'pointer-events-none');
+      } else {
+        modal.classList.add('opacity-0', 'pointer-events-none');
+      }
+    }
+
+    function setSleepTimer(val) {
+      sleepTimerMinutes = val;
+      clearInterval(sleepTimerInterval);
+      sleepTimerInterval = null;
+
+      const btnLabel = document.getElementById('lbl-sleep-timer-btn');
+
+      if (val === 0) {
+        btnLabel.innerText = "Ki";
+        showToast("Elalvási időzítő kikapcsolva.");
+      } else if (val === 'chapter') {
+        btnLabel.innerText = "Fejezet végéig";
+        showToast("Leállítás a fejezet végén.");
+      } else {
+        sleepTimerSecondsRemaining = val * 60;
+        btnLabel.innerText = `${val}p`;
+        showToast(`Elalvási időzítő beállítva: ${val} perc`);
+
+        sleepTimerInterval = setInterval(() => {
+          sleepTimerSecondsRemaining--;
+          const mins = Math.floor(sleepTimerSecondsRemaining / 60);
+          const secs = sleepTimerSecondsRemaining % 60;
+          btnLabel.innerText = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+
+          if (sleepTimerSecondsRemaining <= 0) {
+            clearInterval(sleepTimerInterval);
+            sleepTimerInterval = null;
+            btnLabel.innerText = "Ki";
+            showToast("Elalvási időzítő lejárt, felolvasás leállítva.");
+            pauseTTS();
+          }
+        }, 1000);
+      }
+      toggleSleepTimerModal();
+    }
+
+    function checkChapterEndSleepTimer() {
+      if (sleepTimerMinutes === 'chapter') {
+        let currentChIdx = book.chapters.findIndex(ch => lastSeenPIdx >= ch.startP && lastSeenPIdx <= ch.endP);
+        if (currentChIdx !== -1) {
+          const currentCh = book.chapters[currentChIdx];
+          if (lastSeenPIdx >= currentCh.endP) {
+            showToast("Fejezet vége elért, felolvasás leállítva.");
+            setSleepTimer(0);
+            pauseTTS();
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    function updateTTSSpeedParam(val) {
+      ttsRate = parseFloat(val);
+      document.getElementById('lbl-tts-speed').innerText = `${ttsRate.toFixed(2)}x`;
+      document.getElementById('btn-speed').innerText = `${ttsRate.toFixed(1)}x`;
+      localStorage.setItem('ebook_tts_rate', ttsRate);
+      if (isSpeaking) speakSentence(true);
+    }
+
+    function updateTTSDelayParam(val) {
+      sentenceDelay = parseFloat(val);
+      document.getElementById('lbl-tts-delay').innerText = `${sentenceDelay.toFixed(1)} mp`;
+      localStorage.setItem('ebook_sentence_delay', sentenceDelay);
+    }
+
+    function changeTTSSpeedShortcut() {
+      if (ttsRate === 1.0) ttsRate = 1.25;
+      else if (ttsRate === 1.25) ttsRate = 1.5;
+      else if (ttsRate === 1.5) ttsRate = 0.8;
+      else ttsRate = 1.0;
+
+      updateTTSSpeedParam(ttsRate);
+    }
+
+    function changeEdgeVoice(val) {
+      selectedEdgeVoice = val;
+      localStorage.setItem('ebook_edge_voice', val);
+      if (isSpeaking) speakSentence(true);
     }
 
     function toggleTTS() {
@@ -1191,38 +1365,37 @@
       if (ttsSentences.length === 0) return;
       isSpeaking = true;
       document.getElementById('btn-play-pause').innerText = '⏸';
+      
+      if (globalAudioPlayer) {
+        globalAudioPlayer.play().catch(() => {});
+        globalAudioPlayer.pause();
+      }
+      
       speakSentence(true);
-      startKeepAlivePulse();
     }
 
     function pauseTTS() {
       isSpeaking = false;
-      stopKeepAlivePulse();
+      clearTimeout(playbackSafetyTimeout);
+      clearTimeout(window.speechWatchdog);
+      stopAudioPlayback();
       synth.cancel();
+      window.activeUtterance = null;
       document.getElementById('btn-play-pause').innerText = '▶';
       document.getElementById('tts-status').innerText = 'Szüneteltetve';
       removeActiveHighlights();
     }
 
-    function startKeepAlivePulse() {
-      stopKeepAlivePulse();
-      ttsKeepAliveTimer = setInterval(() => {
-        if (isSpeaking && synth.speaking) {
-          if (synth.paused) {
-            synth.resume();
-          }
-        }
-      }, 3000);
-    }
-
-    function stopKeepAlivePulse() {
-      if (ttsKeepAliveTimer) {
-        clearInterval(ttsKeepAliveTimer);
-        ttsKeepAliveTimer = null;
+    function stopAudioPlayback() {
+      clearTimeout(playbackSafetyTimeout);
+      if (globalAudioPlayer) {
+        globalAudioPlayer.pause();
+        globalAudioPlayer.onended = null;
+        globalAudioPlayer.onerror = null;
       }
     }
 
-    function speakSentence(isJump = false) {
+    async function speakSentence(isJump = false) {
       if (!isSpeaking || currentSentenceIdx >= ttsSentences.length) {
         pauseTTS();
         if (currentSentenceIdx >= ttsSentences.length) {
@@ -1231,45 +1404,120 @@
         return;
       }
 
-      if (isJump) {
-        synth.cancel();
-      }
+      if (checkChapterEndSleepTimer()) return;
+
+      stopAudioPlayback();
+      synth.cancel();
 
       const item = ttsSentences[currentSentenceIdx];
       lastSeenPIdx = item.pIdx;
       book.lastSeenPIdx = item.pIdx;
-      
-      currentUtterance = new SpeechSynthesisUtterance(item.text);
-      currentUtterance.lang = 'hu-HU';
-      if (selectedVoice) currentUtterance.voice = selectedVoice;
-      currentUtterance.rate = ttsRate;
 
       highlightTTSSentence(item);
-
-      document.getElementById('tts-status').innerText = `Felolvasás (${currentSentenceIdx + 1}/${ttsSentences.length})`;
       document.getElementById('tts-current-sentence').innerText = item.text;
 
-      currentUtterance.onend = () => {
-        if (isSpeaking) {
-          currentSentenceIdx++;
-          speakSentence(false);
-          saveReadingProgressToLocal();
+      const proceedToNext = () => {
+        clearTimeout(playbackSafetyTimeout);
+        clearTimeout(window.speechWatchdog);
+        window.activeUtterance = null;
+
+        if (!isSpeaking) return;
+        currentSentenceIdx++;
+        saveReadingProgressToLocal();
+        if (sentenceDelay > 0) {
+          setTimeout(() => speakSentence(), sentenceDelay * 1000);
+        } else {
+          speakSentence();
         }
       };
 
-      currentUtterance.onerror = (err) => {
-        console.warn("TTS mondat hiba, ugrás a következőre:", err);
-        if (isSpeaking) {
-          currentSentenceIdx++;
-          setTimeout(() => speakSentence(false), 150);
-        }
-      };
-
-      if (synth.paused) {
-        synth.resume();
+      // 1. GOOGLE TRANSLATE GTTS
+      if (selectedEdgeVoice === 'gtts-hu') {
+        document.getElementById('tts-status').innerText = `🌐 Google gTTS: ${currentSentenceIdx + 1}/${ttsSentences.length}`;
+        playGTTS(item.text, proceedToNext);
+        return;
       }
 
-      synth.speak(currentUtterance);
+      // 2. KIZÁRÓLAG IPHONE NATÍV PRÉMIUM HANGOK (Garantáltan nem ugrik át mondatot)
+      if (selectedEdgeVoice.startsWith('native-') || selectedEdgeVoice === 'native') {
+        const voiceObj = getSelectedNativeVoiceObj();
+        const voiceName = voiceObj ? voiceObj.name : "Magyar Hang";
+        document.getElementById('tts-status').innerText = `📱 Natív Hang (${voiceName}): ${currentSentenceIdx + 1}/${ttsSentences.length}`;
+
+        setTimeout(() => {
+          if (!isSpeaking) return;
+
+          const utter = new SpeechSynthesisUtterance(item.text);
+          utter.lang = 'hu-HU';
+          if (voiceObj) {
+            utter.voice = voiceObj;
+          }
+          utter.rate = ttsRate;
+
+          window.activeUtterance = utter;
+
+          let hasEnded = false;
+          const safeEnd = () => {
+            if (hasEnded) return;
+            hasEnded = true;
+            proceedToNext();
+          };
+
+          utter.onend = safeEnd;
+          utter.onerror = (e) => {
+            console.warn("Natív TTS hiba:", e);
+            safeEnd();
+          };
+
+          const estDuration = Math.max(3000, (item.text.length / (8 * ttsRate)) * 1000 + 3000);
+          window.speechWatchdog = setTimeout(() => {
+            console.warn("Watchdog léptetés...");
+            safeEnd();
+          }, estDuration);
+
+          if (synth.paused) {
+            synth.resume();
+          }
+
+          synth.speak(utter);
+        }, 60);
+
+        return;
+      }
+    }
+
+    function playGTTS(textToSay, onEndedCallback) {
+      stopAudioPlayback();
+
+      const encodedText = encodeURIComponent(textToSay);
+      const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodedText}&tl=hu&client=tw-ob`;
+
+      globalAudioPlayer.src = url;
+      globalAudioPlayer.playbackRate = ttsRate;
+
+      let hasEnded = false;
+      const safeEnd = () => {
+        if (hasEnded) return;
+        hasEnded = true;
+        clearTimeout(playbackSafetyTimeout);
+        if (typeof onEndedCallback === 'function') onEndedCallback();
+      };
+
+      globalAudioPlayer.onended = safeEnd;
+      globalAudioPlayer.onerror = (e) => {
+        console.warn("gTTS hiba:", e);
+        safeEnd();
+      };
+
+      playbackSafetyTimeout = setTimeout(() => {
+        console.warn("gTTS biztonsági léptetés...");
+        safeEnd();
+      }, 7000);
+
+      globalAudioPlayer.play().catch(err => {
+        console.warn("gTTS indítási hiba:", err);
+        safeEnd();
+      });
     }
 
     function highlightTTSSentence(item) {
@@ -1285,17 +1533,8 @@
       document.querySelectorAll('.tts-active').forEach(el => el.classList.remove('tts-active'));
     }
 
-    function changeTTSSpeed() {
-      if (ttsRate === 1.0) ttsRate = 1.25;
-      else if (ttsRate === 1.25) ttsRate = 1.5;
-      else if (ttsRate === 1.5) ttsRate = 0.8;
-      else ttsRate = 1.0;
-
-      document.getElementById('btn-speed').innerText = `${ttsRate}x`;
-      if (isSpeaking) speakSentence(true);
-    }
-
     function toggleDrawer() {
+      saveReadingProgressToLocal();
       const drawer = document.getElementById('drawer');
       const panel = document.getElementById('drawer-panel');
 
@@ -1354,7 +1593,7 @@
           `;
 
           item.onclick = () => {
-            scrollToParagraph(ch.startP);
+            scrollToParagraph(ch.startP, true, true);
             toggleDrawer();
           };
 
@@ -1370,7 +1609,7 @@
           const item = document.createElement('div');
           item.className = "p-2 bg-slate-900/60 hover:bg-slate-700/60 rounded-xl cursor-pointer text-indigo-300 flex items-center justify-between border border-slate-700/50";
           item.innerHTML = `
-            <span onclick="scrollToParagraph(${bm.pIdx}); toggleDrawer();" class="truncate flex-1">${bm.title}</span>
+            <span onclick="scrollToParagraph(${bm.pIdx}, true, true); toggleDrawer();" class="truncate flex-1">${bm.title}</span>
             <button onclick="deleteBookmark(${idx})" class="p-1 hover:bg-rose-500/20 text-rose-400 rounded-lg text-xs shrink-0">🗑️</button>
           `;
           content.appendChild(item);
@@ -1400,6 +1639,7 @@
     }
 
     function toggleSearchModal() {
+      saveReadingProgressToLocal();
       const modal = document.getElementById('search-modal');
       if (modal.classList.contains('opacity-0')) {
         modal.classList.remove('opacity-0', 'pointer-events-none');
@@ -1428,7 +1668,7 @@
             item.className = "p-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-300 hover:border-indigo-500 cursor-pointer";
             item.innerHTML = `<span class="font-bold text-indigo-400">#${pIdx + 1}:</span> ${p.substring(0, 80)}...`;
             item.onclick = () => {
-              scrollToParagraph(pIdx);
+              scrollToParagraph(pIdx, true, true);
               toggleSearchModal();
             };
             resultsContainer.appendChild(item);
@@ -1442,6 +1682,7 @@
     }
 
     function toggleSettingsModal() {
+      saveReadingProgressToLocal();
       const modal = document.getElementById('settings-modal');
       const sheet = document.getElementById('settings-sheet');
       
@@ -1481,6 +1722,15 @@
     function loadStoredSettings() {
       const theme = localStorage.getItem('ebook_theme') || 'dark';
       setTheme(theme);
+      
+      const select = document.getElementById('select-edge-voice');
+      if (select) select.value = selectedEdgeVoice;
+
+      document.getElementById('slider-tts-speed').value = ttsRate;
+      document.getElementById('lbl-tts-speed').innerText = `${ttsRate.toFixed(2)}x`;
+
+      document.getElementById('slider-tts-delay').value = sentenceDelay;
+      document.getElementById('lbl-tts-delay').innerText = `${sentenceDelay.toFixed(1)} mp`;
     }
   </script>
 </body>
