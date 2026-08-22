@@ -2212,9 +2212,11 @@
     }
 
     function getEffectiveServerUrl() {
-      if (window.location.hostname.includes('onrender.com') || window.location.port === '5000') {
+      // Lokális fejlesztési szerver
+      if (window.location.port === '5000' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
         return window.location.origin;
       }
+      // GitHub Pages vagy bármely más statikus host -> Edge-TTS API szerver (Render)
       return 'https://homebook-m7vz.onrender.com';
     }
 
