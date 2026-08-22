@@ -2454,7 +2454,64 @@
         if (success) return;
       }
 
-      // 3. Ha az adott idegen nyelvhez van telepített natív rendszerhang (pl. Angol Guy/Jenny -> Alex/Samantha)
+      // 3. Felhős / Helyi Edge-TTS Neurális Motor hívása (150ms válaszidő, stúdióminőség)
+      const baseUrl = getEffectivePiperUrl();
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 8000);
+        const endpointUrl = `${baseUrl}/api/tts?text=${encodeURIComponent(textToSay)}&voice=${encodeURIComponent(voiceName)}&speed=${encodeURIComponent(ttsRate)}`;
+        const response = await fetch(endpointUrl, { signal: controller.signal });
+        clearTimeout(timeoutId);
+
+        if (response && response.ok) {
+          const blob = await response.blob();
+          if (sessionToken !== currentTTSSessionToken || !isSpeaking) return;
+
+          const cacheKey = getAudioCacheKey(textToSay, voiceCode);
+          dbPutAudioCache(cacheKey, blob, textToSay);
+
+          if (currentGTTSBlobUrl) {
+            URL.revokeObjectURL(currentGTTSBlobUrl);
+          }
+          currentGTTSBlobUrl = URL.createObjectURL(blob);
+
+          globalAudioPlayer.src = currentGTTSBlobUrl;
+          globalAudioPlayer.playbackRate = ttsRate;
+
+          let hasEnded = false;
+          const safeEnd = () => {
+            if (hasEnded || sessionToken !== currentTTSSessionToken) return;
+            hasEnded = true;
+            clearTimeout(playbackSafetyTimeout);
+            clearInterval(audioWatchdogInterval);
+            logApp("TTS_SUCCESS", `Sikeres Microsoft Edge-TTS felolvasás: ${voiceName}`);
+            if (typeof onEndedCallback === 'function') onEndedCallback();
+          };
+
+          globalAudioPlayer.onended = safeEnd;
+          globalAudioPlayer.ontimeupdate = () => {
+            if (sessionToken !== currentTTSSessionToken || hasEnded) return;
+            const dur = globalAudioPlayer.duration;
+            const curr = globalAudioPlayer.currentTime;
+            if (dur > 0 && isFinite(dur) && curr >= dur - 0.1) {
+              safeEnd();
+            }
+          };
+
+          globalAudioPlayer.onerror = () => {
+            logApp("EDGE_TTS_PLAY_ERR", "Edge-TTS audio lejátszási hiba");
+            safeEnd();
+          };
+
+          await globalAudioPlayer.play();
+          logApp("TTS_PLAYING", `Microsoft Edge-TTS lejátszás elindult: ${voiceName}`);
+          return;
+        }
+      } catch(err) {
+        logApp("EDGE_TTS_BACKEND_ERR", `Edge-TTS szerver hiba (${baseUrl}), átváltás rendszerhangra`, err);
+      }
+
+      // 4. Ha az adott idegen nyelvhez van telepített natív rendszerhang (pl. Angol Guy/Jenny -> Alex/Samantha)
       if (langCode !== 'hu') {
         const matchingNativeVoice = allVoices.find(v => v.lang && v.lang.toLowerCase().startsWith(langCode));
         if (matchingNativeVoice) {
@@ -2464,13 +2521,9 @@
         }
       }
 
-      // 4. Fallback helyi rendszerhangra (Safari/Chrome nem tartalmaz Microsoft hangokat natívan)
+      // 5. Fallback helyi rendszerhangra
       const isMaleVoice = voiceName.includes('Tamas') || voiceName.includes('Guy');
-      logApp("EDGE_SYNTH_FALLBACK", `Safari/Helyi hang szintézis: ${voiceName} (Valódi MS hanghoz Azure API kulcs vagy Microsoft Edge böngésző szükséges)`);
-      if (!window.hasShownAzureToast && !azureKey) {
-        window.hasShownAzureToast = true;
-        showToast("💡 Tipp: Valódi Microsoft Neural stúdióhanghoz nyisd meg Microsoft Edge-ben vagy adj meg Azure kulcsot a Beállításokban (⚙️)!");
-      }
+      logApp("EDGE_SYNTH_FALLBACK", `Safari/Helyi hang szintézis: ${voiceName}`);
       playNativeUtteranceWithVoice(textToSay, null, onEndedCallback, sessionToken, isMaleVoice ? 0.85 : 1.0);
     }
 
@@ -2544,9 +2597,9 @@
 
     async function fetchAndCacheSentenceAudio(textToSay, voiceCode, cacheKey) {
       try {
+        const baseUrl = getEffectivePiperUrl();
         if (voiceCode.startsWith('piper-')) {
           const voiceName = voiceCode.replace('piper-', '');
-          const baseUrl = getEffectivePiperUrl();
 
           let response = null;
           const controller = new AbortController();
@@ -2560,7 +2613,7 @@
               signal: controller.signal
             });
           } catch(e1) {
-            response = await fetch(`${baseUrl}/api/tts?text=${encodeURIComponent(textToSay)}&voice=${encodeURIComponent(voiceName)}`, {
+            response = await fetch(`${baseUrl}/api/tts?text=${encodeURIComponent(textToSay)}&voice=${encodeURIComponent(voiceName)}&speed=${encodeURIComponent(ttsRate)}`, {
               method: 'GET',
               signal: controller.signal
             });
@@ -2603,6 +2656,20 @@
               if (blob && blob.size > 100) {
                 await dbPutAudioCache(cacheKey, blob, textToSay);
                 logApp("BUFFER_PREFETCH_OK", `⚡ Azure Puffer előretöltve (${blob.size} bájt) [${voiceName}]`, { text: textToSay.substring(0, 35) });
+              }
+            }
+          } else {
+            // Edge-TTS felhős szerver pufferelés
+            const endpointUrl = `${baseUrl}/api/tts?text=${encodeURIComponent(textToSay)}&voice=${encodeURIComponent(voiceName)}&speed=${encodeURIComponent(ttsRate)}`;
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 8000);
+            const response = await fetch(endpointUrl, { signal: controller.signal });
+            clearTimeout(timeoutId);
+            if (response && response.ok) {
+              const blob = await response.blob();
+              if (blob && blob.size > 100) {
+                await dbPutAudioCache(cacheKey, blob, textToSay);
+                logApp("BUFFER_PREFETCH_OK", `⚡ Edge-TTS Puffer előretöltve (${blob.size} bájt) [${voiceName}]`, { text: textToSay.substring(0, 35) });
               }
             }
           }
