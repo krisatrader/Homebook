@@ -1,0 +1,1411 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Home E-Book Pro">
+  <meta name="theme-color" content="#0f172a">
+  <title>Home E-book Pro</title>
+
+  <!-- Külső könyvtárak -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/epubjs/dist/epub.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  
+  <!-- Tailwind CSS & Google Fonts -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;1,400&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Plus Jakarta Sans', 'sans-serif'],
+            serif: ['Lora', 'serif'],
+          },
+          colors: {
+            sepia: {
+              bg: '#f4ecd8',
+              surface: '#e8dfca',
+              text: '#433422',
+              muted: '#7e6b56',
+              border: '#dcd1b8'
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    :root {
+      --sat: env(safe-area-inset-top, 0px);
+      --sab: env(safe-area-inset-bottom, 0px);
+    }
+    body {
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+    .reader-selectable {
+      user-select: text;
+    }
+    .tts-active {
+      background-color: rgba(99, 102, 241, 0.3);
+      border-radius: 6px;
+      padding: 2px 4px;
+      box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.5);
+    }
+    .highlight-yellow { background-color: rgba(253, 224, 71, 0.4); }
+    .highlight-green { background-color: rgba(74, 222, 128, 0.4); }
+    .highlight-blue { background-color: rgba(96, 165, 250, 0.4); }
+
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(156, 163, 175, 0.3); border-radius: 4px; }
+  </style>
+</head>
+<body class="bg-slate-900 text-slate-100 font-sans h-screen flex flex-col overflow-hidden transition-colors duration-300 dark" id="app-body">
+
+  <!-- FEJLÉC -->
+  <header class="pt-[calc(var(--sat)+0.5rem)] pb-2.5 px-4 bg-slate-800/80 backdrop-blur-md border-b border-slate-700/50 flex items-center justify-between z-30 shrink-0">
+    <div class="flex items-center gap-2">
+      <button onclick="toggleDrawer()" class="w-9 h-9 rounded-lg bg-slate-700/50 text-slate-300 hover:text-white flex items-center justify-center text-base active:scale-95 transition" title="Menü és tartalomjegyzék">
+        ☰
+      </button>
+      <button onclick="toggleLibraryModal()" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-indigo-600/20 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-600/30 transition text-xs font-semibold">
+        📚 Könyvtár
+      </button>
+      <h1 class="font-bold text-xs sm:text-sm tracking-tight bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent truncate max-w-[110px] sm:max-w-xs" id="app-title">
+        Home E-Book Pro
+      </h1>
+    </div>
+
+    <!-- Fejléc gombok -->
+    <div class="flex items-center gap-1.5">
+      <button onclick="toggleSearchModal()" class="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-slate-700/50 text-slate-300 hover:text-white flex items-center justify-center text-sm active:scale-95 transition" title="Keresés a könyvben">
+        🔍
+      </button>
+      <button id="btn-translate-all" onclick="translateCurrentContent()" class="px-2.5 py-1.5 rounded-lg bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 font-medium text-xs flex items-center gap-1 active:scale-95 transition" title="Teljes szöveg fordítása magyarra">
+        <span>🇭🇺</span> <span class="hidden sm:inline">Fordítás</span>
+      </button>
+      <button onclick="addBookmark()" class="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-slate-700/50 text-slate-300 hover:text-white flex items-center justify-center text-sm active:scale-95 transition" title="Könyvjelző">
+        🔖
+      </button>
+      <button onclick="toggleSettingsModal()" class="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-slate-700/50 text-slate-300 hover:text-white flex items-center justify-center text-sm active:scale-95 transition" title="Beállítások">
+        ⚙️
+      </button>
+    </div>
+  </header>
+
+  <!-- OLVASÁSI HALADÁSI SÁV -->
+  <div class="w-full bg-slate-800 h-1 shrink-0">
+    <div id="reading-progress-bar" class="bg-indigo-500 h-full w-0 transition-all duration-150"></div>
+  </div>
+
+  <!-- FŐ OLVASÓ FELÜLET -->
+  <main class="flex-1 overflow-y-auto px-4 sm:px-8 py-6 reader-selectable relative" id="reader-container" onscroll="updateReadingProgress()">
+    <div class="max-w-2xl mx-auto space-y-5 pb-32" id="reader-content">
+      <!-- Tartalom töltődik ide -->
+    </div>
+
+    <!-- LEBEGŐ MENÜ SZÖVEGKIJELÖLÉSKOR -->
+    <div id="selection-popover" class="hidden absolute z-40 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl p-1.5 flex items-center gap-1 backdrop-blur-md">
+      <button onclick="applyHighlight('yellow')" class="px-2 py-1 rounded-lg hover:bg-slate-700 text-xs">🟨</button>
+      <button onclick="applyHighlight('green')" class="px-2 py-1 rounded-lg hover:bg-slate-700 text-xs">🟩</button>
+      <button onclick="applyHighlight('blue')" class="px-2 py-1 rounded-lg hover:bg-slate-700 text-xs">🟦</button>
+      <div class="w-px h-4 bg-slate-700 my-auto"></div>
+      <button onclick="translateSelectedText()" class="px-2.5 py-1 rounded-lg bg-emerald-600/30 text-emerald-300 hover:bg-emerald-600/50 text-xs font-semibold">🇭🇺 Fordít</button>
+      <button onclick="addNoteFromSelection()" class="px-2.5 py-1 rounded-lg bg-indigo-600/30 text-indigo-300 hover:bg-indigo-600/50 text-xs font-semibold">📝 Jegyzet</button>
+    </div>
+  </main>
+
+  <!-- TOAST ÉRTESÍTÉSEK -->
+  <div id="toast-notification" class="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-indigo-600 text-white text-xs font-semibold px-4 py-2 rounded-xl shadow-xl opacity-0 pointer-events-none transition-all duration-300 border border-indigo-400/30">
+    Értesítés
+  </div>
+
+  <!-- FOLYAMAT INDIKÁTOR MODAL -->
+  <div id="progress-modal" class="fixed inset-0 bg-black/75 backdrop-blur-md z-50 opacity-0 pointer-events-none transition-opacity duration-300 flex items-center justify-center p-4">
+    <div class="bg-slate-800 border border-slate-700 w-full max-w-sm rounded-3xl p-6 text-center space-y-4 shadow-2xl">
+      <div id="progress-spinner" class="w-12 h-12 border-4 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin mx-auto"></div>
+      <div class="space-y-1">
+        <h3 id="progress-title" class="font-bold text-sm text-white">Művelet folyamatban...</h3>
+        <p id="progress-status" class="text-xs text-slate-400">Kérjük várj egy pillanatot</p>
+      </div>
+      <div class="w-full bg-slate-900 rounded-full h-2 overflow-hidden border border-slate-700/80">
+        <div id="progress-bar-fill" class="bg-gradient-to-r from-indigo-500 to-emerald-400 h-full w-0 transition-all duration-200"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONFIRM MODAL -->
+  <div id="confirm-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 opacity-0 pointer-events-none transition-opacity duration-300 flex items-center justify-center p-4">
+    <div class="bg-slate-800 border border-slate-700 w-full max-w-xs rounded-2xl p-5 space-y-4 shadow-2xl text-center">
+      <h3 id="confirm-modal-text" class="text-xs font-bold text-slate-200">Biztosan folytatod?</h3>
+      <div class="flex gap-2">
+        <button onclick="closeConfirmModal(false)" class="flex-1 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-xl text-xs font-semibold transition">Mégse</button>
+        <button onclick="closeConfirmModal(true)" class="flex-1 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-semibold transition">Igen, törlés</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- JEGYZET MODAL -->
+  <div id="note-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 opacity-0 pointer-events-none transition-opacity duration-300 flex items-center justify-center p-4">
+    <div class="bg-slate-800 border border-slate-700 w-full max-w-sm rounded-2xl p-5 space-y-3 shadow-2xl">
+      <h3 class="text-xs font-bold text-slate-300 uppercase">Jegyzet hozzáadása</h3>
+      <p id="note-quote-preview" class="text-xs text-indigo-300 font-serif italic truncate bg-slate-900 p-2.5 rounded-xl border border-slate-700/60"></p>
+      <textarea id="note-text-input" rows="3" placeholder="Írd ide a jegyzetedet..." class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-indigo-500"></textarea>
+      <div class="flex justify-end gap-2 pt-1">
+        <button onclick="closeNoteModal(false)" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-xl text-xs font-semibold transition">Mégse</button>
+        <button onclick="closeNoteModal(true)" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold transition">Mentés</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- FORDÍTÁS EREDMÉNY MODAL -->
+  <div id="translation-result-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 opacity-0 pointer-events-none transition-opacity duration-300 flex items-center justify-center p-4">
+    <div class="bg-slate-800 border border-slate-700 w-full max-w-md rounded-2xl p-5 space-y-3 shadow-2xl">
+      <h3 class="text-xs font-bold text-emerald-400 uppercase tracking-wider">🇭🇺 Szakasz Fordítása</h3>
+      <div class="space-y-2">
+        <div>
+          <label class="text-[10px] text-slate-400 font-bold uppercase">Eredeti szöveg:</label>
+          <p id="trans-original-text" class="text-xs text-slate-300 bg-slate-900 p-2.5 rounded-xl border border-slate-700/60 max-h-24 overflow-y-auto leading-relaxed"></p>
+        </div>
+        <div>
+          <label class="text-[10px] text-emerald-400 font-bold uppercase">Magyarul:</label>
+          <p id="trans-result-text" class="text-xs text-white bg-slate-900 p-2.5 rounded-xl border border-emerald-500/30 max-h-24 overflow-y-auto leading-relaxed font-medium"></p>
+        </div>
+      </div>
+      <div class="flex justify-end pt-1">
+        <button onclick="closeTranslationModal()" class="px-4 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded-xl text-xs font-semibold transition">Bezárás</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- KÖNYVTÁR MODAL -->
+  <div id="library-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 opacity-0 pointer-events-none transition-opacity duration-300 flex items-center justify-center p-3 sm:p-6">
+    <div class="bg-slate-800 border border-slate-700 w-full max-w-2xl h-[85vh] rounded-3xl p-5 flex flex-col gap-4 shadow-2xl">
+      
+      <!-- Modal Fejléc -->
+      <div class="flex items-center justify-between border-b border-slate-700 pb-3">
+        <h2 class="font-bold text-base text-white flex items-center gap-2">📚 Könyvtáram</h2>
+        <button onclick="toggleLibraryModal()" class="w-8 h-8 rounded-full bg-slate-700 text-slate-400 flex items-center justify-center hover:text-white">✕</button>
+      </div>
+
+      <!-- Mappa Lapfülek -->
+      <div class="flex border-b border-slate-700 text-xs font-semibold overflow-x-auto">
+        <button onclick="switchLibraryTab('my-books')" id="lib-tab-my" class="px-4 py-2 text-indigo-400 border-b-2 border-indigo-500 shrink-0">📱 iPhone Könyveim</button>
+        <button onclick="switchLibraryTab('translated-books')" id="lib-tab-translated" class="px-4 py-2 text-slate-400 shrink-0">🇭🇺 Fordított Könyvek</button>
+      </div>
+
+      <!-- SAJÁT KÖNYVEK MAPPA -->
+      <div id="lib-content-my" class="flex-1 overflow-y-auto space-y-3 pr-1">
+        
+        <!-- iPhone Mappa Helye: Ebook -->
+        <div class="p-3 bg-slate-900/90 border border-slate-700/80 rounded-2xl space-y-2">
+          <label class="block text-[11px] font-bold text-indigo-300 uppercase tracking-wider">📂 Saját Mappa Neve iPhone-on:</label>
+          <div class="flex gap-2">
+            <input type="text" id="folder-name-input" value="Ebook" oninput="saveFolderNameInput(this.value)" placeholder="Ebook" class="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-200 font-semibold focus:outline-none focus:border-indigo-500">
+            <label class="py-1.5 px-3 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs rounded-xl flex items-center justify-center gap-1 cursor-pointer active:scale-95 transition shadow-md shadow-indigo-600/30 shrink-0">
+              <span>📥 Tallózás az Ebook mappából</span>
+              <input type="file" id="file-input" accept=".epub,.kepub,.kepub.epub,.txt,.pdf" multiple class="hidden" onchange="handleFileUpload(event)">
+            </label>
+          </div>
+        </div>
+
+        <div id="my-books-list" class="space-y-3">
+          <!-- Saját könyvek kártyái ide töltődnek -->
+        </div>
+      </div>
+
+      <!-- FORDÍTOTT KÖNYVEK MAPPA -->
+      <div id="lib-content-translated" class="flex-1 overflow-y-auto space-y-3 pr-1 hidden">
+        <!-- Fordított könyvek kártyái -->
+      </div>
+
+    </div>
+  </div>
+
+  <!-- OLDALMENÜ / DRAWER -->
+  <div id="drawer" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 opacity-0 pointer-events-none transition-opacity duration-300 flex">
+    <div class="bg-slate-800 border-r border-slate-700 w-4/5 max-w-xs h-full p-5 flex flex-col gap-4 transform -translate-x-full transition-transform duration-300 shadow-2xl" id="drawer-panel">
+      <div class="flex items-center justify-between border-b border-slate-700 pb-3">
+        <h2 class="font-bold text-sm text-white flex items-center gap-2">📚 Navigáció & Adatok</h2>
+        <button onclick="toggleDrawer()" class="text-slate-400 hover:text-white text-lg">✕</button>
+      </div>
+
+      <div class="flex border-b border-slate-700 text-xs font-semibold">
+        <button onclick="switchTab('toc')" id="tab-toc" class="flex-1 py-2 text-indigo-400 border-b-2 border-indigo-500">Fejezetek</button>
+        <button onclick="switchTab('marks')" id="tab-marks" class="flex-1 py-2 text-slate-400">Könyvjelzők</button>
+        <button onclick="switchTab('stats')" id="tab-stats" class="flex-1 py-2 text-slate-400">Statisztika</button>
+      </div>
+
+      <div class="flex-1 overflow-y-auto space-y-2 text-xs" id="drawer-content">
+        <!-- Dinamikus tartalom -->
+      </div>
+    </div>
+    <div class="flex-1" onclick="toggleDrawer()"></div>
+  </div>
+
+  <!-- KERESŐ MODAL (Belső) -->
+  <div id="search-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 opacity-0 pointer-events-none transition-opacity duration-300 flex items-start justify-center p-4 pt-20">
+    <div class="bg-slate-800 border border-slate-700 w-full max-w-md rounded-2xl p-4 space-y-3 shadow-2xl">
+      <div class="flex items-center justify-between">
+        <h3 class="text-xs font-bold text-slate-300 uppercase">Keresés a könyvben</h3>
+        <button onclick="toggleSearchModal()" class="text-slate-400 hover:text-white">✕</button>
+      </div>
+      <input type="text" id="search-input" onkeyup="performSearch()" placeholder="Írj be egy szót vagy kifejezést..." class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+      <div id="search-results" class="max-h-60 overflow-y-auto space-y-1.5 text-xs"></div>
+    </div>
+  </div>
+
+  <!-- ALSÓ WEBSPEECH TTS LEJÁTSZÓ BAR + FEJEZETVÁLTÓ -->
+  <div class="fixed bottom-0 left-0 right-0 p-3 pb-[calc(var(--sab)+0.75rem)] bg-slate-800/90 backdrop-blur-lg border-t border-slate-700/60 z-30 flex items-center justify-between gap-3 shadow-2xl">
+    
+    <div class="flex items-center gap-1.5 shrink-0">
+      <button onclick="previousChapter()" class="w-9 h-9 rounded-full bg-slate-700/80 hover:bg-slate-600 text-slate-200 flex items-center justify-center text-xs font-bold active:scale-95 transition" title="Előző fejezet">
+        ⏮
+      </button>
+      
+      <button id="btn-play-pause" onclick="toggleTTS()" class="w-11 h-11 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white flex items-center justify-center text-base shrink-0 shadow-lg shadow-indigo-600/40 active:scale-95 transition" title="Felolvasás indítása/szüneteltetése">
+        ▶
+      </button>
+
+      <button onclick="nextChapter()" class="w-9 h-9 rounded-full bg-slate-700/80 hover:bg-slate-600 text-slate-200 flex items-center justify-center text-xs font-bold active:scale-95 transition" title="Következő fejezet">
+        ⏭
+      </button>
+    </div>
+
+    <div class="min-w-0 flex-1">
+      <div class="flex items-center justify-between">
+        <span id="tts-status" class="text-[10px] font-bold text-indigo-400 uppercase tracking-wider truncate">Magyar Felolvasó</span>
+        <span id="reading-percentage" class="text-[10px] text-slate-400 shrink-0 ml-1">0%</span>
+      </div>
+      <div id="tts-current-sentence" class="text-xs text-slate-300 truncate font-serif italic">
+        Kattints a lejátszásra a felolvasáshoz...
+      </div>
+    </div>
+
+    <div class="flex items-center gap-1.5 shrink-0">
+      <button onclick="changeTTSSpeed()" id="btn-speed" class="px-2 py-1.5 rounded-lg bg-slate-700 text-xs font-bold text-slate-300 hover:bg-slate-600 active:scale-95 transition" title="Felolvasási sebesség">
+        1.0x
+      </button>
+    </div>
+  </div>
+
+  <!-- BEÁLLÍTÁSOK MODAL -->
+  <div id="settings-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 opacity-0 pointer-events-none transition-opacity duration-300 flex items-end sm:items-center justify-center p-0 sm:p-4">
+    <div class="bg-slate-800 border-t sm:border border-slate-700 w-full max-w-md rounded-t-3xl sm:rounded-2xl p-6 space-y-5 transform translate-y-full sm:translate-y-0 transition-transform duration-300 shadow-2xl" id="settings-sheet">
+      
+      <div class="flex items-center justify-between border-b border-slate-700 pb-3">
+        <h2 class="text-sm font-bold text-white flex items-center gap-2">⚙️ Olvasó Beállítások</h2>
+        <button onclick="toggleSettingsModal()" class="w-7 h-7 rounded-full bg-slate-700 text-slate-400 flex items-center justify-center hover:text-white text-xs">✕</button>
+      </div>
+
+      <div class="space-y-1.5">
+        <label class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Olvasási Téma</label>
+        <div class="grid grid-cols-3 gap-2">
+          <button onclick="setTheme('dark')" class="p-2.5 rounded-xl border border-slate-700 bg-slate-900 text-slate-100 font-medium text-xs flex flex-col items-center gap-1 hover:border-indigo-500 transition">
+            <span class="w-3.5 h-3.5 rounded-full bg-slate-900 border border-slate-600"></span> Sötét
+          </button>
+          <button onclick="setTheme('sepia')" class="p-2.5 rounded-xl border border-sepia-border bg-sepia-bg text-sepia-text font-medium text-xs flex flex-col items-center gap-1 hover:border-amber-600 transition">
+            <span class="w-3.5 h-3.5 rounded-full bg-sepia-bg border border-amber-800"></span> Szépia
+          </button>
+          <button onclick="setTheme('light')" class="p-2.5 rounded-xl border border-gray-300 bg-white text-slate-900 font-medium text-xs flex flex-col items-center gap-1 hover:border-blue-500 transition">
+            <span class="w-3.5 h-3.5 rounded-full bg-white border border-gray-400"></span> Világos
+          </button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-4">
+        <div class="space-y-1">
+          <div class="flex justify-between text-[11px] font-bold text-slate-400 uppercase">
+            <span>Betűméret</span> <span id="lbl-font-size">18px</span>
+          </div>
+          <input type="range" min="14" max="28" value="18" id="slider-font-size" oninput="updateFontSize(this.value)" class="w-full accent-indigo-500 bg-slate-700 h-1.5 rounded-lg appearance-none cursor-pointer">
+        </div>
+        <div class="space-y-1">
+          <div class="flex justify-between text-[11px] font-bold text-slate-400 uppercase">
+            <span>Sorköz</span> <span id="lbl-line-height">1.8</span>
+          </div>
+          <input type="range" min="1.2" max="2.4" step="0.1" value="1.8" id="slider-line-height" oninput="updateLineHeight(this.value)" class="w-full accent-indigo-500 bg-slate-700 h-1.5 rounded-lg appearance-none cursor-pointer">
+        </div>
+      </div>
+
+      <div class="space-y-1.5">
+        <label class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Magyar TTS Hang</label>
+        <select id="select-voice" onchange="changeVoice(this.value)" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500">
+          <option value="">Keresés...</option>
+        </select>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- JAVASCRIPT & TÁROLÓ LOGIKA -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    // FIREBASE INITIALIZATION
+    const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+      apiKey: "",
+      authDomain: "default-app.firebaseapp.com",
+      projectId: "default-app",
+      storageBucket: "default-app.appspot.com",
+      messagingSenderId: "123456789",
+      appId: "1:123456789:web:abcdef"
+    };
+
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'home-ebook-app';
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    let currentUser = null;
+    let saveTimeout = null;
+
+    const SAMPLE_BOOKS = [
+      {
+        id: 'sample-1',
+        title: "The Wonderful Wizard of Oz",
+        author: "L. Frank Baum",
+        isTranslated: false,
+        status: "folyamatban",
+        lastSeenPIdx: 0,
+        chapters: [
+          { title: "1. Fejezet - A Forgószél", startP: 0, endP: 3 },
+          { title: "2. Fejezet - A Tanácskozás", startP: 4, endP: 5 }
+        ],
+        paragraphs: [
+          "Dorothy lived in the midst of the great Kansas prairies, with Uncle Henry, who was a farmer, and Aunt Em, who was the farmer's wife.",
+          "Their house was small, for the lumber to build it had to be carried by wagon many miles. There were four walls, a floor and a roof, which made one room.",
+          "When Dorothy stood in the doorway and looked around, she could see nothing but the great gray prairie on every side.",
+          "The sun had baked the plowed land into a gray mass, with little cracks running through it. Even the grass was not green, for the sun had burned the tops of the long blades.",
+          "Suddenly Uncle Henry stood up. 'There's a cyclone coming, Em,' he called to his wife. 'I'll go look after the stock.'",
+          "Dorothy caught up Toto and started to follow her aunt into the cellar. But when she was halfway across the room, there came a great shriek from the wind."
+        ]
+      }
+    ];
+
+    // ÁLLAPOT
+    let myLibrary = [];
+    let currentBookId = 'sample-1';
+    let book = { id: "", title: "", author: "", chapters: [], paragraphs: [], lastSeenPIdx: 0 };
+    let bookmarks = [];
+    let highlights = [];
+    let notes = [];
+    let lastSeenPIdx = 0;
+    let myFolderName = "Ebook";
+    let pendingNoteQuote = "";
+
+    let currentFontSize = 18;
+    let currentLineHeight = 1.8;
+    let currentFontFamily = 'serif';
+    let currentTheme = 'dark';
+
+    let synth = window.speechSynthesis;
+    let huVoices = [];
+    let selectedVoice = null;
+    let isSpeaking = false;
+    let ttsSentences = [];
+    let currentSentenceIdx = 0;
+    let ttsRate = 1.0;
+
+    // FOLYAMATOS FELOLVASÁS ÉS SAFARI AKADÁS VÉDELEM
+    let currentUtterance = null;
+    let ttsKeepAliveTimer = null;
+
+    // AUTHENTIKÁCIÓ ÉS ADATOK BETÖLTÉSE
+    window.addEventListener('DOMContentLoaded', async () => {
+      initTTS();
+      loadStoredSettings();
+      loadStoredFolderName();
+      setupSelectionListener();
+
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+      } catch (e) {
+        console.warn("Auth fallback:", e);
+      }
+
+      onAuthStateChanged(auth, (user) => {
+        currentUser = user;
+        if (user) {
+          setupFirestoreListeners(user.uid);
+        } else {
+          myLibrary = [...SAMPLE_BOOKS];
+          loadBookFromLibrary('sample-1');
+        }
+      });
+    });
+
+    // TOAST ÉRTSÍTÉSEK
+    window.showToast = function(msg) {
+      const toast = document.getElementById('toast-notification');
+      if (!toast) return;
+      toast.innerText = msg;
+      toast.classList.remove('opacity-0', 'pointer-events-none');
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'pointer-events-none');
+      }, 2500);
+    };
+
+    // CONFIRM MODAL
+    let confirmCallback = null;
+    window.showConfirm = function(msg, callback) {
+      const modal = document.getElementById('confirm-modal');
+      const text = document.getElementById('confirm-modal-text');
+      if (!modal || !text) return;
+      text.innerText = msg;
+      confirmCallback = callback;
+      modal.classList.remove('opacity-0', 'pointer-events-none');
+    };
+
+    window.closeConfirmModal = function(confirmed) {
+      const modal = document.getElementById('confirm-modal');
+      if (modal) modal.classList.add('opacity-0', 'pointer-events-none');
+      if (confirmed && typeof confirmCallback === 'function') {
+        confirmCallback();
+      }
+      confirmCallback = null;
+    };
+
+    // MAPPA NÉV MENTÉS ÉS BEÁLLÍTÁS
+    function loadStoredFolderName() {
+      const saved = localStorage.getItem('ebook_folder_name');
+      if (saved) {
+        myFolderName = saved;
+      }
+      const input = document.getElementById('folder-name-input');
+      if (input) input.value = myFolderName;
+    }
+
+    window.saveFolderNameInput = function(val) {
+      myFolderName = val.trim() || "Ebook";
+      localStorage.setItem('ebook_folder_name', myFolderName);
+    };
+
+    // FIRESTORE LISTENEREK
+    function setupFirestoreListeners(userId) {
+      const booksCol = collection(db, 'artifacts', appId, 'users', userId, 'books');
+      
+      onSnapshot(booksCol, (snapshot) => {
+        const loadedBooks = [];
+        snapshot.forEach(doc => {
+          loadedBooks.push(doc.data());
+        });
+
+        if (loadedBooks.length > 0) {
+          myLibrary = loadedBooks;
+          
+          const stateDocRef = doc(db, 'artifacts', appId, 'users', userId, 'state', 'current');
+          getDoc(stateDocRef).then(sDoc => {
+            if (sDoc.exists() && sDoc.data().activeBookId) {
+              const activeId = sDoc.data().activeBookId;
+              if (myLibrary.some(b => b.id === activeId)) {
+                loadBookFromLibrary(activeId);
+                return;
+              }
+            }
+            loadBookFromLibrary(myLibrary[0].id);
+          });
+
+        } else {
+          myLibrary = [...SAMPLE_BOOKS];
+          SAMPLE_BOOKS.forEach(b => {
+            setDoc(doc(db, 'artifacts', appId, 'users', userId, 'books', b.id), b);
+          });
+          loadBookFromLibrary('sample-1');
+        }
+      }, (err) => {
+        console.error("Firestore hiba:", err);
+        myLibrary = [...SAMPLE_BOOKS];
+        loadBookFromLibrary('sample-1');
+      });
+    }
+
+    function saveReadingProgressToCloud() {
+      if (!currentUser || !book || !book.id) return;
+
+      clearTimeout(saveTimeout);
+      saveTimeout = setTimeout(async () => {
+        try {
+          const bookRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'books', book.id);
+          await updateDoc(bookRef, {
+            lastSeenPIdx: lastSeenPIdx,
+            status: book.status || 'folyamatban'
+          });
+
+          const stateRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'state', 'current');
+          await setDoc(stateRef, {
+            activeBookId: book.id,
+            lastSeenPIdx: lastSeenPIdx,
+            updatedAt: Date.now()
+          }, { merge: true });
+
+        } catch (e) {
+          console.warn("Mentési hiba:", e);
+        }
+      }, 500);
+    }
+
+    // FOLYAMAT INDIKÁTOR
+    window.showProgress = function(title, status, percent = 0) {
+      const modal = document.getElementById('progress-modal');
+      document.getElementById('progress-title').innerText = title;
+      document.getElementById('progress-status').innerText = status;
+      document.getElementById('progress-bar-fill').style.width = `${percent}%`;
+      modal.classList.remove('opacity-0', 'pointer-events-none');
+    }
+
+    window.updateProgress = function(status, percent) {
+      document.getElementById('progress-status').innerText = status;
+      document.getElementById('progress-bar-fill').style.width = `${percent}%`;
+    }
+
+    window.hideProgress = function() {
+      const modal = document.getElementById('progress-modal');
+      modal.classList.add('opacity-0', 'pointer-events-none');
+    }
+
+    window.loadBookFromLibrary = function(bookId) {
+      const found = myLibrary.find(b => b.id === bookId);
+      if (found) {
+        currentBookId = bookId;
+        book = found;
+        lastSeenPIdx = book.lastSeenPIdx || 0;
+        document.getElementById('app-title').innerText = book.title;
+        renderBook();
+        
+        setTimeout(() => {
+          scrollToParagraph(lastSeenPIdx, false);
+        }, 150);
+      }
+    }
+
+    function initTTS() {
+      const updateVoices = () => {
+        const voices = synth.getVoices();
+        huVoices = voices.filter(v => v.lang.includes('hu') || v.lang.includes('HU'));
+        
+        const select = document.getElementById('select-voice');
+        select.innerHTML = '';
+
+        if (huVoices.length > 0) {
+          selectedVoice = huVoices.find(v => v.name.includes('Siri') || v.name.includes('Mariska') || v.name.includes('Google') || v.name.includes('Natural')) || huVoices[0];
+          
+          huVoices.forEach((v, idx) => {
+            const opt = document.createElement('option');
+            opt.value = idx;
+            opt.innerText = `${v.name} (${v.lang})`;
+            if (v === selectedVoice) opt.selected = true;
+            select.appendChild(opt);
+          });
+        } else {
+          const opt = document.createElement('option');
+          opt.innerText = "Alapértelmezett magyar (hu-HU)";
+          select.appendChild(opt);
+        }
+      };
+
+      updateVoices();
+      if (speechSynthesis.onvoiceschanged !== undefined) {
+        speechSynthesis.onvoiceschanged = updateVoices;
+      }
+    }
+
+    window.changeVoice = function(idx) {
+      if (huVoices[idx]) {
+        selectedVoice = huVoices[idx];
+        if (isSpeaking) speakSentence(true);
+      }
+    }
+
+    function renderBook() {
+      const container = document.getElementById('reader-content');
+      container.innerHTML = '';
+
+      book.paragraphs.forEach((pText, idx) => {
+        const p = document.createElement('p');
+        p.id = `para-${idx}`;
+        p.className = `transition-all duration-150 leading-relaxed cursor-pointer hover:opacity-90 ${currentFontFamily === 'serif' ? 'font-serif' : 'font-sans'}`;
+        p.style.fontSize = `${currentFontSize}px`;
+        p.style.lineHeight = `${currentLineHeight}`;
+        
+        p.onclick = () => {
+          if (window.getSelection().toString().trim().length === 0) {
+            scrollToParagraph(idx);
+          }
+        };
+
+        const hl = highlights.find(h => h.pIdx === idx);
+        if (hl) {
+          p.classList.add(`highlight-${hl.color}`);
+        }
+
+        p.innerText = pText;
+        container.appendChild(p);
+      });
+
+      prepareTTSData();
+      updateReadingProgress();
+      renderDrawerContent('toc');
+    }
+
+    // EPUB / TXT / PDF FELTÖLTÉS IPHONE EBOOK MAP PÁBÓL
+    window.handleFileUpload = async function(event) {
+      const files = Array.from(event.target.files);
+      if (!files || files.length === 0) return;
+
+      showProgress("Könyv Betöltése", `${files.length} fájl feldolgozása...`, 30);
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const title = file.name.replace(/\.[^/.]+$/, "").replace(/\.kepub$/, "");
+
+        if (file.name.endsWith('.txt')) {
+          const text = await file.text();
+          const pList = text.split(/\n+/).map(p => p.trim()).filter(p => p.length > 0);
+          await addBookToLibrary(title, myFolderName, pList, [{ title: "Teljes Könyv", startP: 0, endP: pList.length - 1 }]);
+        } 
+        else if (file.name.endsWith('.epub') || file.name.endsWith('.kepub') || file.name.endsWith('.kepub.epub')) {
+          try {
+            const buffer = await file.arrayBuffer();
+            const epubBook = ePub(buffer);
+            await epubBook.ready;
+            
+            let loadedParagraphs = [];
+            let chapters = [];
+
+            for (const section of epubBook.spine.spineItems) {
+              const doc = await section.load(epubBook.load.bind(epubBook));
+              const elems = Array.from(doc.querySelectorAll('p, h1, h2, h3'))
+                .map(el => el.innerText.trim())
+                .filter(t => t.length > 10);
+              
+              if (elems.length > 0) {
+                const startP = loadedParagraphs.length;
+                loadedParagraphs.push(...elems);
+                const endP = loadedParagraphs.length - 1;
+                chapters.push({ title: elems[0].substring(0, 30) + '...', startP, endP });
+              }
+            }
+            
+            await addBookToLibrary(title, myFolderName, loadedParagraphs, chapters);
+          } catch (err) {
+            console.warn("EPUB hiba:", err);
+          }
+        }
+        else if (file.name.endsWith('.pdf')) {
+          try {
+            const buffer = await file.arrayBuffer();
+            const pdfData = new Uint8Array(buffer);
+            const pdf = await pdfjsLib.getDocument({ data: pdfData }).promise;
+            
+            let loadedParagraphs = [];
+            let chapters = [];
+
+            for (let pNo = 1; pNo <= pdf.numPages; pNo++) {
+              const page = await pdf.getPage(pNo);
+              const textContent = await page.getTextContent();
+              const pageText = textContent.items.map(item => item.str).join(' ');
+              
+              if (pageText.trim().length > 0) {
+                const startP = loadedParagraphs.length;
+                loadedParagraphs.push(pageText);
+                const endP = loadedParagraphs.length - 1;
+                chapters.push({ title: `${pNo}. Oldal`, startP, endP });
+              }
+            }
+
+            await addBookToLibrary(title, myFolderName, loadedParagraphs, chapters);
+          } catch (err) {
+            console.warn("PDF hiba:", err);
+          }
+        }
+      }
+
+      hideProgress();
+      toggleLibraryModal();
+      showToast("Könyv sikeresen elmentve!");
+    }
+
+    async function addBookToLibrary(title, author, paragraphs, chapters, isTranslated = false) {
+      const newBook = {
+        id: 'book-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
+        title: title,
+        author: author,
+        isTranslated: isTranslated,
+        status: 'uj',
+        lastSeenPIdx: 0,
+        chapters: chapters,
+        paragraphs: paragraphs
+      };
+
+      myLibrary.unshift(newBook);
+      
+      if (currentUser) {
+        await setDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'books', newBook.id), newBook);
+      }
+
+      loadBookFromLibrary(newBook.id);
+    }
+
+    // FORDÍTÁS
+    window.translateCurrentContent = async function() {
+      const total = book.paragraphs.length;
+      if (total === 0) return;
+
+      showProgress("Könyv Fordítása", `Előkészítés... (0/${total})`, 0);
+
+      const translatedParagraphs = [];
+      const translatedChapters = JSON.parse(JSON.stringify(book.chapters));
+
+      try {
+        for (let i = 0; i < total; i++) {
+          const originalText = book.paragraphs[i];
+          const pct = Math.round(((i + 1) / total) * 100);
+          updateProgress(`Fordítás: ${i + 1} / ${total} bekezdés kész (${pct}%)`, pct);
+
+          try {
+            const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(originalText.substring(0, 500))}&langpair=autodetect|hu`);
+            const data = await res.json();
+            if (data && data.responseData && data.responseData.translatedText) {
+              translatedParagraphs.push(data.responseData.translatedText);
+            } else {
+              translatedParagraphs.push(originalText);
+            }
+          } catch (err) {
+            translatedParagraphs.push(originalText);
+          }
+        }
+
+        const translatedTitle = book.title.startsWith('[HU]') ? book.title : `[HU] ${book.title}`;
+        await addBookToLibrary(translatedTitle, book.author, translatedParagraphs, translatedChapters, true);
+
+        updateProgress("Fordítás elmentve a Fordított könyvtárba!", 100);
+        setTimeout(() => {
+          hideProgress();
+          toggleLibraryModal();
+          switchLibraryTab('translated-books');
+        }, 1200);
+
+      } catch (e) {
+        hideProgress();
+        showToast("Nem sikerült a fordítás.");
+      }
+    }
+
+    window.toggleLibraryModal = function() {
+      const modal = document.getElementById('library-modal');
+      if (modal.classList.contains('opacity-0')) {
+        modal.classList.remove('opacity-0', 'pointer-events-none');
+        loadStoredFolderName();
+        renderMyBookshelf('my-books');
+      } else {
+        modal.classList.add('opacity-0', 'pointer-events-none');
+      }
+    }
+
+    window.switchLibraryTab = function(tab) {
+      document.getElementById('lib-tab-my').className = "px-4 py-2 text-slate-400 shrink-0";
+      document.getElementById('lib-tab-translated').className = "px-4 py-2 text-slate-400 shrink-0";
+
+      document.getElementById('lib-content-my').classList.add('hidden');
+      document.getElementById('lib-content-translated').classList.add('hidden');
+
+      if (tab === 'my-books') {
+        document.getElementById('lib-tab-my').className = "px-4 py-2 text-indigo-400 border-b-2 border-indigo-500 font-semibold shrink-0";
+        document.getElementById('lib-content-my').classList.remove('hidden');
+        renderMyBookshelf('my-books');
+      } else if (tab === 'translated-books') {
+        document.getElementById('lib-tab-translated').className = "px-4 py-2 text-indigo-400 border-b-2 border-indigo-500 font-semibold shrink-0";
+        document.getElementById('lib-content-translated').classList.remove('hidden');
+        renderMyBookshelf('translated-books');
+      }
+    }
+
+    function renderMyBookshelf(tab) {
+      const isTransTab = tab === 'translated-books';
+      const container = document.getElementById(isTransTab ? 'lib-content-translated' : 'my-books-list');
+      container.innerHTML = '';
+
+      const filteredBooks = myLibrary.filter(b => isTransTab ? b.isTranslated : !b.isTranslated);
+
+      if (filteredBooks.length === 0) {
+        container.innerHTML = `<p class="text-xs text-slate-400 text-center pt-8">${isTransTab ? 'Még nincs lefordított könyved. Nyiss meg egy könyvet és kattints a 🇭🇺 Fordítás gombra!' : 'Még nem töltöttél fel saját könyvet iPhone-ról.'}</p>`;
+        return;
+      }
+
+      filteredBooks.forEach(b => {
+        const totalP = b.paragraphs.length || 1;
+        const progressPct = Math.round(((b.lastSeenPIdx || 0) / totalP) * 100);
+
+        let statusBadge = '';
+        if (b.status === 'olvasott' || progressPct >= 95) {
+          statusBadge = '<span class="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-bold text-[10px]">🟢 Olvasott</span>';
+        } else if (progressPct > 0) {
+          statusBadge = '<span class="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-400 border border-amber-500/30 font-bold text-[10px]">🟡 Folyamatban</span>';
+        } else {
+          statusBadge = '<span class="px-2 py-0.5 rounded-md bg-blue-500/20 text-blue-400 border border-blue-500/30 font-bold text-[10px]">🔵 Új</span>';
+        }
+
+        const isCurrent = b.id === currentBookId;
+
+        const card = document.createElement('div');
+        card.className = `p-3.5 rounded-2xl border ${isCurrent ? 'border-indigo-500 bg-slate-900/80' : 'border-slate-700/60 bg-slate-900/40'} flex flex-col gap-2 transition hover:border-slate-600`;
+        
+        card.innerHTML = `
+          <div class="flex items-start justify-between gap-2">
+            <div>
+              <h3 class="font-bold text-sm text-white">${b.title}</h3>
+              <p class="text-xs text-slate-400">${b.author}</p>
+            </div>
+            ${statusBadge}
+          </div>
+          
+          <div class="space-y-1 pt-1">
+            <div class="flex justify-between text-[10px] text-slate-400">
+              <span>Haladás</span>
+              <span class="font-bold text-indigo-400">${progressPct}%</span>
+            </div>
+            <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+              <div class="bg-indigo-500 h-full transition-all duration-300" style="width: ${progressPct}%"></div>
+            </div>
+          </div>
+
+          <div class="flex justify-end gap-2 pt-2 border-t border-slate-800">
+            ${isCurrent ? '<span class="text-xs text-indigo-400 font-semibold self-center">Nyitva</span>' : `<button onclick="loadBookFromLibrary('${b.id}'); toggleLibraryModal();" class="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold">Olvasás</button>`}
+            <button onclick="deleteBookFromLibrary('${b.id}', '${tab}')" class="px-2 py-1 text-rose-400 hover:bg-rose-500/20 rounded-lg text-xs">🗑️</button>
+          </div>
+        `;
+
+        container.appendChild(card);
+      });
+    }
+
+    window.deleteBookFromLibrary = function(id, tab) {
+      if (myLibrary.length <= 1) {
+        showToast("Legalább egy könyvnek maradnia kell!");
+        return;
+      }
+      showConfirm("Biztosan törölni szeretnéd ezt a könyvet?", async () => {
+        myLibrary = myLibrary.filter(b => b.id !== id);
+        if (currentUser) {
+          await deleteDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'books', id));
+        }
+        if (currentBookId === id) {
+          loadBookFromLibrary(myLibrary[0].id);
+        }
+        renderMyBookshelf(tab);
+        showToast("Könyv törölve.");
+      });
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return str.replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+    }
+
+    function setupSelectionListener() {
+      document.addEventListener('selectionchange', () => {
+        const selection = window.getSelection();
+        const popover = document.getElementById('selection-popover');
+
+        if (selection && selection.toString().trim().length > 0) {
+          const range = selection.getRangeAt(0);
+          const rect = range.getBoundingClientRect();
+          const containerRect = document.getElementById('reader-container').getBoundingClientRect();
+
+          popover.style.top = `${rect.top - containerRect.top - 45}px`;
+          popover.style.left = `${Math.max(10, rect.left - containerRect.left)}px`;
+          popover.classList.remove('hidden');
+        } else {
+          popover.classList.add('hidden');
+        }
+      });
+    }
+
+    window.translateSelectedText = async function() {
+      const text = window.getSelection().toString().trim();
+      if (!text) return;
+      
+      showProgress("Azonnali Fordítás", "Szakasz fordítása...", 50);
+      try {
+        const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=autodetect|hu`);
+        const data = await res.json();
+        hideProgress();
+        
+        document.getElementById('trans-original-text').innerText = text;
+        document.getElementById('trans-result-text').innerText = data.responseData?.translatedText || text;
+        const modal = document.getElementById('translation-result-modal');
+        if (modal) modal.classList.remove('opacity-0', 'pointer-events-none');
+
+      } catch(e) {
+        hideProgress();
+        showToast("A fordítás nem sikerült.");
+      }
+    }
+
+    window.closeTranslationModal = function() {
+      const modal = document.getElementById('translation-result-modal');
+      if (modal) modal.classList.add('opacity-0', 'pointer-events-none');
+    };
+
+    window.applyHighlight = function(color) {
+      const selection = window.getSelection();
+      if (!selection.anchorNode) return;
+
+      const pElem = selection.anchorNode.parentElement.closest('p');
+      if (pElem) {
+        const pIdx = parseInt(pElem.id.replace('para-', ''));
+        highlights = highlights.filter(h => h.pIdx !== pIdx);
+        highlights.push({ pIdx, color });
+        renderBook();
+        showToast("Kiemelés elmentve.");
+      }
+    }
+
+    window.addNoteFromSelection = function() {
+      const text = window.getSelection().toString().trim();
+      if (!text) return;
+      
+      pendingNoteQuote = text;
+      document.getElementById('note-quote-preview').innerText = `"${text}"`;
+      document.getElementById('note-text-input').value = '';
+      const modal = document.getElementById('note-modal');
+      if (modal) modal.classList.remove('opacity-0', 'pointer-events-none');
+    }
+
+    window.closeNoteModal = function(save) {
+      const modal = document.getElementById('note-modal');
+      if (modal) modal.classList.add('opacity-0', 'pointer-events-none');
+      if (save) {
+        const noteText = document.getElementById('note-text-input').value.trim();
+        if (noteText) {
+          notes.push({ text: noteText, quote: pendingNoteQuote });
+          showToast("Jegyzet elmentve!");
+        }
+      }
+      pendingNoteQuote = "";
+    };
+
+    window.addBookmark = function() {
+      const title = `Könyvjelző (${lastSeenPIdx + 1}. bekezdés)`;
+      bookmarks.push({ title, pIdx: lastSeenPIdx, id: Date.now() });
+      showToast("Könyvjelző hozzáadva!");
+    }
+
+    window.deleteBookmark = function(idx) {
+      bookmarks.splice(idx, 1);
+      renderDrawerContent('marks');
+      showToast("Könyvjelző törölve.");
+    }
+
+    window.updateReadingProgress = function() {
+      const container = document.getElementById('reader-container');
+      const progress = (container.scrollTop / (container.scrollHeight - container.clientHeight)) * 100;
+      const rounded = Math.min(100, Math.max(0, Math.round(progress || 0)));
+
+      document.getElementById('reading-progress-bar').style.width = `${rounded}%`;
+      document.getElementById('reading-percentage').innerText = `${rounded}%`;
+
+      const pElems = document.querySelectorAll('#reader-content p');
+      pElems.forEach((p, idx) => {
+        const rect = p.getBoundingClientRect();
+        if (rect.top >= 0 && rect.top <= window.innerHeight / 2) {
+          lastSeenPIdx = idx;
+          book.lastSeenPIdx = idx;
+          if (rounded >= 95) book.status = 'olvasott';
+          else if (rounded > 0) book.status = 'folyamatban';
+        }
+      });
+
+      saveReadingProgressToCloud();
+
+      const drawer = document.getElementById('drawer');
+      if (!drawer.classList.contains('opacity-0')) {
+        renderDrawerContent('toc');
+      }
+    }
+
+    window.previousChapter = function() {
+      if (!book.chapters || book.chapters.length === 0) return;
+      let currentChIdx = book.chapters.findIndex(ch => lastSeenPIdx >= ch.startP && lastSeenPIdx <= ch.endP);
+      if (currentChIdx > 0) {
+        scrollToParagraph(book.chapters[currentChIdx - 1].startP);
+      } else {
+        scrollToParagraph(book.chapters[0].startP);
+      }
+    }
+
+    window.nextChapter = function() {
+      if (!book.chapters || book.chapters.length === 0) return;
+      let currentChIdx = book.chapters.findIndex(ch => lastSeenPIdx >= ch.startP && lastSeenPIdx <= ch.endP);
+      if (currentChIdx !== -1 && currentChIdx < book.chapters.length - 1) {
+        scrollToParagraph(book.chapters[currentChIdx + 1].startP);
+      }
+    }
+
+    function scrollToParagraph(pIdx, save = true) {
+      const target = document.getElementById(`para-${pIdx}`);
+      if (target) {
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        lastSeenPIdx = pIdx;
+        book.lastSeenPIdx = pIdx;
+        if (save) saveReadingProgressToCloud();
+        syncTTSToParagraph(pIdx);
+      }
+    }
+
+    function syncTTSToParagraph(targetPIdx) {
+      const sentenceIdx = ttsSentences.findIndex(s => s.pIdx >= targetPIdx);
+      if (sentenceIdx !== -1) {
+        currentSentenceIdx = sentenceIdx;
+        const item = ttsSentences[currentSentenceIdx];
+
+        document.getElementById('tts-current-sentence').innerText = item.text;
+        document.getElementById('tts-status').innerText = `Ugrás ide: ${currentSentenceIdx + 1}/${ttsSentences.length}`;
+
+        if (isSpeaking) {
+          speakSentence(true);
+        } else {
+          highlightTTSSentence(item);
+        }
+      }
+    }
+
+    function prepareTTSData() {
+      ttsSentences = [];
+      currentSentenceIdx = 0;
+
+      book.paragraphs.forEach((p, pIdx) => {
+        const matches = p.match(/[^.!?]+[.!?]+/g) || [p];
+        matches.forEach(s => {
+          if (s.trim().length > 0) {
+            ttsSentences.push({ text: s.trim(), pIdx });
+          }
+        });
+      });
+    }
+
+    window.toggleTTS = function() {
+      if (isSpeaking) pauseTTS();
+      else startTTS();
+    }
+
+    function startTTS() {
+      if (ttsSentences.length === 0) return;
+      isSpeaking = true;
+      document.getElementById('btn-play-pause').innerText = '⏸';
+      speakSentence(true);
+      startKeepAlivePulse();
+    }
+
+    function pauseTTS() {
+      isSpeaking = false;
+      stopKeepAlivePulse();
+      synth.cancel();
+      document.getElementById('btn-play-pause').innerText = '▶';
+      document.getElementById('tts-status').innerText = 'Szüneteltetve';
+      removeActiveHighlights();
+    }
+
+    function startKeepAlivePulse() {
+      stopKeepAlivePulse();
+      ttsKeepAliveTimer = setInterval(() => {
+        if (isSpeaking && synth.speaking) {
+          if (synth.paused) {
+            synth.resume();
+          }
+        }
+      }, 3000);
+    }
+
+    function stopKeepAlivePulse() {
+      if (ttsKeepAliveTimer) {
+        clearInterval(ttsKeepAliveTimer);
+        ttsKeepAliveTimer = null;
+      }
+    }
+
+    function speakSentence(isJump = false) {
+      if (!isSpeaking || currentSentenceIdx >= ttsSentences.length) {
+        pauseTTS();
+        if (currentSentenceIdx >= ttsSentences.length) {
+          currentSentenceIdx = 0;
+        }
+        return;
+      }
+
+      if (isJump) {
+        synth.cancel();
+      }
+
+      const item = ttsSentences[currentSentenceIdx];
+      lastSeenPIdx = item.pIdx;
+      book.lastSeenPIdx = item.pIdx;
+      
+      currentUtterance = new SpeechSynthesisUtterance(item.text);
+      currentUtterance.lang = 'hu-HU';
+      if (selectedVoice) currentUtterance.voice = selectedVoice;
+      currentUtterance.rate = ttsRate;
+
+      highlightTTSSentence(item);
+
+      document.getElementById('tts-status').innerText = `Felolvasás (${currentSentenceIdx + 1}/${ttsSentences.length})`;
+      document.getElementById('tts-current-sentence').innerText = item.text;
+
+      currentUtterance.onend = () => {
+        if (isSpeaking) {
+          currentSentenceIdx++;
+          speakSentence(false); // Folyamatos haladás mondatról mondatra
+          saveReadingProgressToCloud();
+        }
+      };
+
+      currentUtterance.onerror = (err) => {
+        console.warn("TTS mondat hiba, ugrás a következőre:", err);
+        if (isSpeaking) {
+          currentSentenceIdx++;
+          setTimeout(() => speakSentence(false), 150);
+        }
+      };
+
+      if (synth.paused) {
+        synth.resume();
+      }
+
+      synth.speak(currentUtterance);
+    }
+
+    function highlightTTSSentence(item) {
+      removeActiveHighlights();
+      const pElem = document.getElementById(`para-${item.pIdx}`);
+      if (pElem) {
+        pElem.classList.add('tts-active');
+        pElem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+
+    function removeActiveHighlights() {
+      document.querySelectorAll('.tts-active').forEach(el => el.classList.remove('tts-active'));
+    }
+
+    window.changeTTSSpeed = function() {
+      if (ttsRate === 1.0) ttsRate = 1.25;
+      else if (ttsRate === 1.25) ttsRate = 1.5;
+      else if (ttsRate === 1.5) ttsRate = 0.8;
+      else ttsRate = 1.0;
+
+      document.getElementById('btn-speed').innerText = `${ttsRate}x`;
+      if (isSpeaking) speakSentence(true);
+    }
+
+    window.toggleDrawer = function() {
+      const drawer = document.getElementById('drawer');
+      const panel = document.getElementById('drawer-panel');
+
+      if (drawer.classList.contains('opacity-0')) {
+        drawer.classList.remove('opacity-0', 'pointer-events-none');
+        panel.classList.remove('-translate-x-full');
+        renderDrawerContent('toc');
+      } else {
+        drawer.classList.add('opacity-0', 'pointer-events-none');
+        panel.classList.add('-translate-x-full');
+      }
+    }
+
+    window.switchTab = function(tab) {
+      document.querySelectorAll('#drawer button').forEach(b => {
+        b.classList.remove('text-indigo-400', 'border-b-2', 'border-indigo-500');
+        b.classList.add('text-slate-400');
+      });
+      document.getElementById(`tab-${tab}`).classList.add('text-indigo-400', 'border-b-2', 'border-indigo-500');
+      renderDrawerContent(tab);
+    }
+
+    function renderDrawerContent(tab) {
+      const content = document.getElementById('drawer-content');
+      content.innerHTML = '';
+
+      if (tab === 'toc') {
+        if (book.chapters.length === 0) {
+          content.innerText = "Nincsenek fejezetek.";
+          return;
+        }
+
+        book.chapters.forEach(ch => {
+          const totalP = Math.max(1, ch.endP - ch.startP + 1);
+          let progress = 0;
+
+          if (lastSeenPIdx > ch.endP) {
+            progress = 100;
+          } else if (lastSeenPIdx >= ch.startP) {
+            progress = Math.round(((lastSeenPIdx - ch.startP + 1) / totalP) * 100);
+          }
+
+          const isCompleted = progress >= 100;
+
+          const item = document.createElement('div');
+          item.className = "p-2.5 bg-slate-900/60 hover:bg-slate-700/60 rounded-xl cursor-pointer border border-slate-700/50 space-y-1.5 transition";
+          
+          item.innerHTML = `
+            <div class="flex items-center justify-between gap-2">
+              <span class="font-semibold ${isCompleted ? 'text-emerald-400' : 'text-slate-200'} truncate">${ch.title}</span>
+              ${isCompleted ? '<span class="text-emerald-400 font-bold shrink-0">✓</span>' : `<span class="text-[10px] font-bold text-indigo-400 shrink-0">${progress}%</span>`}
+            </div>
+            <div class="w-full bg-slate-800 rounded-full h-1 overflow-hidden">
+              <div class="${isCompleted ? 'bg-emerald-500' : 'bg-indigo-500'} h-full transition-all duration-300" style="width: ${progress}%"></div>
+            </div>
+          `;
+
+          item.onclick = () => {
+            scrollToParagraph(ch.startP);
+            toggleDrawer();
+          };
+
+          content.appendChild(item);
+        });
+      } 
+      else if (tab === 'marks') {
+        if (bookmarks.length === 0) {
+          content.innerText = "Még nincs könyvjelződ.";
+          return;
+        }
+        bookmarks.forEach((bm, idx) => {
+          const item = document.createElement('div');
+          item.className = "p-2 bg-slate-900/60 hover:bg-slate-700/60 rounded-xl cursor-pointer text-indigo-300 flex items-center justify-between border border-slate-700/50";
+          item.innerHTML = `
+            <span onclick="scrollToParagraph(${bm.pIdx}); toggleDrawer();" class="truncate flex-1">${bm.title}</span>
+            <button onclick="deleteBookmark(${idx})" class="p-1 hover:bg-rose-500/20 text-rose-400 rounded-lg text-xs shrink-0">🗑️</button>
+          `;
+          content.appendChild(item);
+        });
+      }
+      else if (tab === 'stats') {
+        const wordCount = book.paragraphs.join(' ').split(/\s+/).length;
+        const estMinutes = Math.ceil(wordCount / 200);
+
+        content.innerHTML = `
+          <div class="space-y-3 p-1 text-slate-300">
+            <div class="bg-slate-900 p-3 rounded-xl border border-slate-700">
+              <div class="text-slate-400 text-[10px] uppercase">Összes Szóösszeg</div>
+              <div class="text-base font-bold text-white">${wordCount} szó</div>
+            </div>
+            <div class="bg-slate-900 p-3 rounded-xl border border-slate-700">
+              <div class="text-slate-400 text-[10px] uppercase">Becsült olvasási idő</div>
+              <div class="text-base font-bold text-indigo-400">~ ${estMinutes} perc</div>
+            </div>
+            <div class="bg-slate-900 p-3 rounded-xl border border-slate-700">
+              <div class="text-slate-400 text-[10px] uppercase">Bekezdések száma</div>
+              <div class="text-base font-bold text-white">${book.paragraphs.length} db</div>
+            </div>
+          </div>
+        `;
+      }
+    }
+
+    window.toggleSearchModal = function() {
+      const modal = document.getElementById('search-modal');
+      if (modal.classList.contains('opacity-0')) {
+        modal.classList.remove('opacity-0', 'pointer-events-none');
+        document.getElementById('search-input').focus();
+      } else {
+        modal.classList.add('opacity-0', 'pointer-events-none');
+      }
+    }
+
+    window.performSearch = function() {
+      const query = document.getElementById('search-input').value.toLowerCase().trim();
+      const resultsContainer = document.getElementById('search-results');
+      resultsContainer.innerHTML = '';
+
+      if (query.length < 2) return;
+
+      resultsContainer.innerHTML = '<p class="text-xs text-slate-400 text-center py-2">Keresés...</p>';
+
+      setTimeout(() => {
+        resultsContainer.innerHTML = '';
+        let found = 0;
+        book.paragraphs.forEach((p, pIdx) => {
+          if (p.toLowerCase().includes(query)) {
+            found++;
+            const item = document.createElement('div');
+            item.className = "p-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-300 hover:border-indigo-500 cursor-pointer";
+            item.innerHTML = `<span class="font-bold text-indigo-400">#${pIdx + 1}:</span> ${p.substring(0, 80)}...`;
+            item.onclick = () => {
+              scrollToParagraph(pIdx);
+              toggleSearchModal();
+            };
+            resultsContainer.appendChild(item);
+          }
+        });
+
+        if (found === 0) {
+          resultsContainer.innerHTML = '<p class="text-xs text-rose-400 text-center py-2">Nincs találat.</p>';
+        }
+      }, 100);
+    }
+
+    window.toggleSettingsModal = function() {
+      const modal = document.getElementById('settings-modal');
+      const sheet = document.getElementById('settings-sheet');
+      
+      if (modal.classList.contains('opacity-0')) {
+        modal.classList.remove('opacity-0', 'pointer-events-none');
+        sheet.classList.remove('translate-y-full');
+      } else {
+        modal.classList.add('opacity-0', 'pointer-events-none');
+        sheet.classList.add('translate-y-full');
+      }
+    }
+
+    window.setTheme = function(theme) {
+      currentTheme = theme;
+      const body = document.body;
+      body.classList.remove('bg-slate-900', 'text-slate-100', 'bg-sepia-bg', 'text-sepia-text', 'bg-white', 'text-slate-900');
+
+      if (theme === 'dark') body.classList.add('bg-slate-900', 'text-slate-100');
+      else if (theme === 'sepia') body.classList.add('bg-sepia-bg', 'text-sepia-text');
+      else body.classList.add('bg-white', 'text-slate-900');
+
+      localStorage.setItem('ebook_theme', theme);
+    }
+
+    window.updateFontSize = function(val) {
+      currentFontSize = val;
+      document.getElementById('lbl-font-size').innerText = `${val}px`;
+      document.querySelectorAll('#reader-content p').forEach(p => p.style.fontSize = `${val}px`);
+    }
+
+    window.updateLineHeight = function(val) {
+      currentLineHeight = val;
+      document.getElementById('lbl-line-height').innerText = val;
+      document.querySelectorAll('#reader-content p').forEach(p => p.style.lineHeight = val);
+    }
+
+    function loadStoredSettings() {
+      const theme = localStorage.getItem('ebook_theme') || 'dark';
+      setTheme(theme);
+    }
+  </script>
+</body>
+</html>
