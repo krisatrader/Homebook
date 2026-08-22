@@ -337,9 +337,21 @@
         <button onclick="toggleDiagnosticsModal()" class="text-slate-400 hover:text-white text-lg">✕</button>
       </div>
 
+      <!-- Naplózás Be/Ki kapcsoló sáv -->
+      <div class="flex items-center justify-between bg-slate-900/90 px-3.5 py-2.5 rounded-xl border border-slate-700/60">
+        <div class="flex items-center gap-2">
+          <span class="text-xs font-bold text-slate-300">Részletes naplózás:</span>
+          <span id="log-status-badge" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">🟢 Be</span>
+        </div>
+        <label class="relative inline-flex items-center cursor-pointer">
+          <input type="checkbox" id="chk-logging-toggle" onchange="toggleLoggingStatus(this.checked)" checked class="sr-only peer">
+          <div class="w-9 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500"></div>
+        </label>
+      </div>
+
       <div class="space-y-1.5 flex-1 flex flex-col min-h-0">
         <div class="flex items-center justify-between text-[11px] text-slate-400">
-          <span>Valós idejű működési és hibalogok:</span>
+          <span>Valós idejű műveleti napló:</span>
           <span id="diag-log-count" class="text-indigo-400 font-mono text-[10px]">0 esemény</span>
         </div>
         <textarea id="diagnostics-textarea" readonly class="w-full h-64 bg-slate-950 border border-slate-700/80 rounded-xl p-3 font-mono text-[11px] text-emerald-400/90 leading-tight focus:outline-none focus:border-indigo-500 overflow-y-auto select-all resize-none"></textarea>
@@ -462,9 +474,20 @@
           </div>
         </div>
 
-        <div class="pt-2 border-t border-slate-800/80">
+        <div class="pt-2 border-t border-slate-800/80 space-y-2">
+          <div class="flex items-center justify-between bg-slate-900/60 p-3 rounded-xl border border-slate-700/50">
+            <div>
+              <div class="text-xs font-bold text-slate-200">Műveleti Naplózás (Logs)</div>
+              <div class="text-[10px] text-slate-400">Részletes kattintás és esemény rögzítés</div>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="chk-logging-toggle-settings" onchange="toggleLoggingStatus(this.checked)" checked class="sr-only peer">
+              <div class="w-9 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500"></div>
+            </label>
+          </div>
+
           <button type="button" onclick="toggleSettingsModal(); toggleDiagnosticsModal();" class="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition active:scale-95">
-            <span>📋</span> Rendszernapló & Hibakeresés (Logok)
+            <span>📋</span> Rendszernapló Megnyitása & Másolása
           </button>
         </div>
       </div>
@@ -483,9 +506,40 @@
     // ==========================================
     // 📋 RENDSZERNAPLÓ ÉS DIAGNOSZTIKA LOGOLÓ
     // ==========================================
+    let isLoggingEnabled = localStorage.getItem('ebook_logging_enabled') !== 'false';
     window.appLogs = [];
 
+    function toggleLoggingStatus(enabled) {
+      isLoggingEnabled = enabled;
+      try {
+        localStorage.setItem('ebook_logging_enabled', enabled ? 'true' : 'false');
+      } catch(e) {}
+
+      // UI szinkronizáció
+      const chk1 = document.getElementById('chk-logging-toggle');
+      const chk2 = document.getElementById('chk-logging-toggle-settings');
+      const badge = document.getElementById('log-status-badge');
+
+      if (chk1) chk1.checked = enabled;
+      if (chk2) chk2.checked = enabled;
+      if (badge) {
+        if (enabled) {
+          badge.className = "px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30";
+          badge.innerText = "🟢 Be";
+        } else {
+          badge.className = "px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-700 text-slate-400 border border-slate-600";
+          badge.innerText = "⚪ Ki";
+        }
+      }
+
+      logApp("LOG_CONFIG", `Részletes naplózás ${enabled ? 'bekapcsolva' : 'kikapcsolva'}`);
+      showToast(enabled ? "Műveleti naplózás bekapcsolva" : "Műveleti naplózás szüneteltetve");
+      renderDiagnosticsView();
+    }
+
     function logApp(type, message, details = null) {
+      if (!isLoggingEnabled && type !== 'LOG_CONFIG') return;
+
       const now = new Date();
       const time = now.toTimeString().split(' ')[0] + '.' + String(now.getMilliseconds()).padStart(3, '0');
       let detailStr = '';
@@ -502,7 +556,7 @@
       }
       const entry = { time, type, message, details: detailStr };
       window.appLogs.push(entry);
-      if (window.appLogs.length > 300) window.appLogs.shift();
+      if (window.appLogs.length > 600) window.appLogs.shift();
       console.log(`[${time}] [${type}] ${message}`, detailStr ? `-> ${detailStr}` : '');
       
       const modal = document.getElementById('diagnostics-modal');
@@ -516,14 +570,31 @@
       const count = document.getElementById('diag-log-count');
       if (ta) ta.value = getFormattedLogs();
       if (count) count.innerText = `${window.appLogs.length} esemény`;
+
+      const chk1 = document.getElementById('chk-logging-toggle');
+      const chk2 = document.getElementById('chk-logging-toggle-settings');
+      const badge = document.getElementById('log-status-badge');
+      if (chk1) chk1.checked = isLoggingEnabled;
+      if (chk2) chk2.checked = isLoggingEnabled;
+      if (badge) {
+        if (isLoggingEnabled) {
+          badge.className = "px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30";
+          badge.innerText = "🟢 Be";
+        } else {
+          badge.className = "px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-700 text-slate-400 border border-slate-600";
+          badge.innerText = "⚪ Ki";
+        }
+      }
     }
 
     function getFormattedLogs() {
       const ua = navigator.userAgent;
       const online = navigator.onLine ? 'Online (Csatlakoztatva)' : 'Offline (Nincs kapcsolat)';
+      const logState = isLoggingEnabled ? '🟢 BEKAPCSOLVA' : '⚪ KIKAPCSOLVA';
       let out = `========================================\n` +
                 ` HOMEBOOK PRO - RENDSZERNAPLÓ (LOGS)\n` +
                 ` Időbélyeg: ${new Date().toISOString()}\n` +
+                ` Naplózás állapota: ${logState}\n` +
                 ` Hálózati státusz: ${online}\n` +
                 ` Aktív hang: ${selectedEdgeVoice}\n` +
                 ` Sebesség: ${ttsRate}x | Szünet: ${sentenceDelay}s\n` +
@@ -542,24 +613,29 @@
       if (modal.classList.contains('opacity-0')) {
         modal.classList.remove('opacity-0', 'pointer-events-none');
         renderDiagnosticsView();
+        logApp("UI_MODAL", "Diagnosztika ablak megnyitva");
       } else {
         modal.classList.add('opacity-0', 'pointer-events-none');
+        logApp("UI_MODAL", "Diagnosztika ablak bezárva");
       }
     }
 
     function refreshDiagnosticsModal() {
       renderDiagnosticsView();
+      logApp("UI_ACTION", "Logok kézi frissítése a felületen");
       showToast("Logok frissítve.");
     }
 
     function clearAppLogs() {
       window.appLogs = [];
+      logApp("LOG_CLEAR", "Napló manuálisan kiürítve");
       renderDiagnosticsView();
       showToast("Napló kiürítve.");
     }
 
     function copyLogsToClipboard() {
       const text = getFormattedLogs();
+      logApp("UI_ACTION", "Napló vágólapra másolása megkísérelve");
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(text).then(() => {
           showToast("📋 Logok kimásolva a vágólapra!");
@@ -585,6 +661,50 @@
         }
       }
     }
+
+    // ==========================================
+    // 🖱️ GLOBÁLIS INTERAKCIÓ- ÉS GOMBNAPLÓZÓ
+    // ==========================================
+    document.addEventListener('click', (e) => {
+      if (!isLoggingEnabled) return;
+      const target = e.target;
+
+      // 1. Gomb lenyomások rögzítése
+      const btn = target.closest('button');
+      if (btn) {
+        const btnText = (btn.innerText || btn.title || btn.id || btn.className).trim().substring(0, 40).replace(/\n/g, ' ');
+        const onclickAttr = btn.getAttribute('onclick') || '';
+        logApp("BUTTON_CLICK", `Gomb: "${btnText}"`, { id: btn.id || null, onclick: onclickAttr || null });
+        return;
+      }
+
+      // 2. Olvasó bekezdésre kattintás
+      const p = target.closest('p');
+      if (p && p.id && p.id.startsWith('para-')) {
+        logApp("READER_PARA_CLICK", `Bekezdés kiválasztva: #${p.id}`, { snippet: p.innerText.substring(0, 35) });
+        return;
+      }
+
+      // 3. Menü / Lap fül kattintás
+      if (target.id && target.id.startsWith('tab-')) {
+        logApp("TAB_CLICK", `Fül váltás: #${target.id}`);
+      }
+    }, { passive: true });
+
+    document.addEventListener('input', (e) => {
+      if (!isLoggingEnabled) return;
+      const t = e.target;
+      if (t.id && t.type === 'range') {
+        logApp("SLIDER_CHANGE", `Csúszka állítás: #${t.id}`, { value: t.value });
+      }
+    }, { passive: true });
+
+    document.addEventListener('keydown', (e) => {
+      if (!isLoggingEnabled) return;
+      if (e.key === ' ' || e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Escape') {
+        logApp("KEYBOARD_SHORTCUT", `Billentyűlenyomás: "${e.key}"`, { code: e.code });
+      }
+    }, { passive: true });
 
     function openLocalDB() {
       return new Promise((resolve, reject) => {
@@ -1699,6 +1819,7 @@
       const btn = document.getElementById('btn-speed');
       if (btn) btn.innerText = `${ttsRate.toFixed(1)}x`;
       localStorage.setItem('ebook_tts_rate', ttsRate);
+      logApp("TTS_PARAM_SPEED", `Beszédsebesség beállítva: ${ttsRate.toFixed(2)}x`);
       if (isSpeaking) speakSentence(true);
     }
 
@@ -1709,6 +1830,7 @@
       const lbl = document.getElementById('lbl-tts-delay');
       if (lbl) lbl.innerText = `${sentenceDelay.toFixed(1)} mp`;
       localStorage.setItem('ebook_sentence_delay', sentenceDelay);
+      logApp("TTS_PARAM_DELAY", `Mondatközi szünet beállítva: ${sentenceDelay.toFixed(1)}s`);
     }
 
     function changeTTSSpeedShortcut() {
@@ -1723,10 +1845,12 @@
     function changeEdgeVoice(val) {
       selectedEdgeVoice = val;
       localStorage.setItem('ebook_edge_voice', val);
+      logApp("VOICE_CHANGED", `Felolvasó hang kiválasztva: ${val}`);
       if (isSpeaking) speakSentence(true);
     }
 
     function toggleTTS() {
+      logApp("TTS_TOGGLE", `Felolvasó gomb megnyomva (állapot: ${isSpeaking ? 'Lejátszás -> Szünet' : 'Indítás'})`);
       if (isSpeaking) pauseTTS();
       else startTTS();
     }
@@ -1735,6 +1859,11 @@
       if (ttsSentences.length === 0) return;
       isSpeaking = true;
       document.getElementById('btn-play-pause').innerText = '⏸';
+      logApp("TTS_START", `Felolvasás elindítva mondat #${currentSentenceIdx + 1}/${ttsSentences.length}`, {
+        hang: selectedEdgeVoice,
+        sebesseg: ttsRate,
+        szunet: sentenceDelay
+      });
       
       if (globalAudioPlayer) {
         globalAudioPlayer.play().catch(() => {});
@@ -1745,6 +1874,7 @@
     }
 
     function pauseTTS() {
+      const wasSpeaking = isSpeaking;
       isSpeaking = false;
       clearTimeout(playbackSafetyTimeout);
       clearTimeout(window.speechWatchdog);
@@ -1754,6 +1884,9 @@
       document.getElementById('btn-play-pause').innerText = '▶';
       document.getElementById('tts-status').innerText = 'Szüneteltetve';
       removeActiveHighlights();
+      if (wasSpeaking) {
+        logApp("TTS_PAUSED", `Felolvasás szüneteltetve mondat #${currentSentenceIdx + 1}`);
+      }
     }
 
     function stopAudioPlayback() {
@@ -2208,9 +2341,11 @@
       if (modal.classList.contains('opacity-0')) {
         modal.classList.remove('opacity-0', 'pointer-events-none');
         sheet.classList.remove('translate-y-full');
+        logApp("UI_MODAL", "Beállítások ablak megnyitva");
       } else {
         modal.classList.add('opacity-0', 'pointer-events-none');
         sheet.classList.add('translate-y-full');
+        logApp("UI_MODAL", "Beállítások ablak bezárva");
       }
     }
 
@@ -2247,6 +2382,7 @@
       });
 
       localStorage.setItem('ebook_theme', theme);
+      logApp("THEME_CHANGED", `Olvasási téma beállítva: ${theme}`);
     }
 
     function updateFontSize(val) {
@@ -2255,12 +2391,14 @@
       document.querySelectorAll('#reader-content p:not(.font-bold)').forEach(p => p.style.fontSize = `${currentFontSize}px`);
       document.querySelectorAll('#reader-content h1').forEach(h => h.style.fontSize = `${Math.round(currentFontSize * 1.4)}px`);
       document.querySelectorAll('#reader-content p.font-bold').forEach(p => p.style.fontSize = `${Math.round(currentFontSize * 1.3)}px`);
+      logApp("FONT_SIZE_CHANGED", `Betűméret: ${currentFontSize}px`);
     }
 
     function updateLineHeight(val) {
       currentLineHeight = val;
       document.getElementById('lbl-line-height').innerText = val;
       document.querySelectorAll('#reader-content p:not(.font-bold)').forEach(p => p.style.lineHeight = val);
+      logApp("LINE_HEIGHT_CHANGED", `Sorköz: ${currentLineHeight}`);
     }
 
     function loadStoredSettings() {
@@ -2275,6 +2413,22 @@
 
       document.getElementById('slider-tts-delay').value = sentenceDelay;
       document.getElementById('lbl-tts-delay').innerText = `${sentenceDelay.toFixed(1)} mp`;
+
+      // Naplózás kapcsolók szinkronizálása
+      const chk1 = document.getElementById('chk-logging-toggle');
+      const chk2 = document.getElementById('chk-logging-toggle-settings');
+      const badge = document.getElementById('log-status-badge');
+      if (chk1) chk1.checked = isLoggingEnabled;
+      if (chk2) chk2.checked = isLoggingEnabled;
+      if (badge) {
+        if (isLoggingEnabled) {
+          badge.className = "px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30";
+          badge.innerText = "🟢 Be";
+        } else {
+          badge.className = "px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-700 text-slate-400 border border-slate-600";
+          badge.innerText = "⚪ Ki";
+        }
+      }
     }
   </script>
 </body>
