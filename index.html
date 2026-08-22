@@ -5,16 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Home E-Book Pro">
+  <meta name="apple-mobile-web-app-title" content="Home E-Book">
   <meta name="theme-color" content="#0f172a">
   <title>Home E-book Pro</title>
 
   <!-- Külső könyvtárak -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/epubjs/dist/epub.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   
-  <!-- Tailwind CSS & Google Fonts -->
+  <!-- Tailwind CSS és Google Fonts -->
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -57,7 +58,7 @@
       user-select: text;
     }
     .tts-active {
-      background-color: rgba(99, 102, 241, 0.3);
+      background-color: rgba(99, 102, 241, 0.35);
       border-radius: 6px;
       padding: 2px 4px;
       box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.5);
@@ -208,15 +209,31 @@
       <!-- SAJÁT KÖNYVEK MAPPA -->
       <div id="lib-content-my" class="flex-1 overflow-y-auto space-y-3 pr-1">
         
-        <!-- iPhone Mappa Helye: Ebook -->
-        <div class="p-3 bg-slate-900/90 border border-slate-700/80 rounded-2xl space-y-2">
-          <label class="block text-[11px] font-bold text-indigo-300 uppercase tracking-wider">📂 Saját Mappa Neve iPhone-on:</label>
-          <div class="flex gap-2">
-            <input type="text" id="folder-name-input" value="Ebook" oninput="saveFolderNameInput(this.value)" placeholder="Ebook" class="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-200 font-semibold focus:outline-none focus:border-indigo-500">
-            <label class="py-1.5 px-3 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs rounded-xl flex items-center justify-center gap-1 cursor-pointer active:scale-95 transition shadow-md shadow-indigo-600/30 shrink-0">
-              <span>📥 Tallózás az Ebook mappából</span>
-              <input type="file" id="file-input" accept=".epub,.kepub,.kepub.epub,.txt,.pdf" multiple class="hidden" onchange="handleFileUpload(event)">
-            </label>
+        <!-- iPhone Mappa Helye es Biztonsagi Mentes Kezelo -->
+        <div class="p-3 bg-slate-900/90 border border-slate-700/80 rounded-2xl space-y-3">
+          <div>
+            <label class="block text-[11px] font-bold text-indigo-300 uppercase tracking-wider mb-1">📂 Saját Mappa Neve iPhone-on:</label>
+            <div class="flex gap-2">
+              <input type="text" id="folder-name-input" value="Ebook" oninput="saveFolderNameInput(this.value)" placeholder="Ebook" class="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-200 font-semibold focus:outline-none focus:border-indigo-500">
+              <label class="py-1.5 px-3 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs rounded-xl flex items-center justify-center gap-1 cursor-pointer active:scale-95 transition shadow-md shadow-indigo-600/30 shrink-0">
+                <span>📥 Tallózás / Feltöltés</span>
+                <input type="file" id="file-input" accept=".epub,.kepub,.kepub.epub,.txt,.pdf" multiple class="hidden" onchange="handleFileUpload(event)">
+              </label>
+            </div>
+          </div>
+
+          <!-- BIZTONSÁGI MENTÉS (EXPORT / IMPORT) -->
+          <div class="pt-2 border-t border-slate-800/80 flex items-center justify-between gap-2">
+            <span class="text-[10px] text-slate-400 font-semibold">Biztonsági mentés elmentése az iPhone-ra:</span>
+            <div class="flex gap-1.5">
+              <button onclick="exportBackupToFile()" class="px-2.5 py-1 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 rounded-lg text-[11px] font-semibold transition flex items-center gap-1" title="Könyvek és haladás elmentése fájlba">
+                <span>💾 Mentés</span>
+              </button>
+              <label class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 text-slate-200 border border-slate-600 rounded-lg text-[11px] font-semibold cursor-pointer transition flex items-center gap-1" title="Biztonsági mentés visszatöltése">
+                <span>🔄 Visszaállítás</span>
+                <input type="file" id="import-backup-input" accept=".json" class="hidden" onchange="importBackupFromFile(event)">
+              </label>
+            </div>
           </div>
         </div>
 
@@ -349,30 +366,67 @@
     </div>
   </div>
 
-  <!-- JAVASCRIPT & TÁROLÓ LOGIKA -->
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-    import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-    import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+  <!-- JAVASCRIPT LOGIKA -->
+  <script>
+    // INDEXEDDB HELYI ADATBÁZIS A KÖNYVEK HOSSZÚ TÁVÚ MEGŐRZÉSÉHEZ
+    const DB_NAME = 'HomeEbookDB_v4';
+    const DB_VERSION = 1;
 
-    // FIREBASE INITIALIZATION
-    const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
-      apiKey: "",
-      authDomain: "default-app.firebaseapp.com",
-      projectId: "default-app",
-      storageBucket: "default-app.appspot.com",
-      messagingSenderId: "123456789",
-      appId: "1:123456789:web:abcdef"
-    };
+    function openLocalDB() {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME, DB_VERSION);
+        req.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains('books')) {
+            db.createObjectStore('books', { keyPath: 'id' });
+          }
+        };
+        req.onsuccess = (e) => resolve(e.target.result);
+        req.onerror = (e) => reject(e);
+      });
+    }
 
-    const appId = typeof __app_id !== 'undefined' ? __app_id : 'home-ebook-app';
-    const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
-    const db = getFirestore(app);
+    async function dbSaveBook(bookObj) {
+      try {
+        const db = await openLocalDB();
+        const tx = db.transaction('books', 'readwrite');
+        tx.objectStore('books').put(bookObj);
+      } catch(e) {
+        console.warn("Local DB mentési hiba:", e);
+      }
+    }
 
-    let currentUser = null;
-    let saveTimeout = null;
+    async function dbLoadAllBooks() {
+      try {
+        const db = await openLocalDB();
+        return new Promise((resolve) => {
+          const tx = db.transaction('books', 'readonly');
+          const req = tx.objectStore('books').getAll();
+          req.onsuccess = () => resolve(req.result || []);
+          req.onerror = () => resolve([]);
+        });
+      } catch(e) {
+        return [];
+      }
+    }
 
+    async function dbDeleteBook(id) {
+      try {
+        const db = await openLocalDB();
+        const tx = db.transaction('books', 'readwrite');
+        tx.objectStore('books').delete(id);
+      } catch(e) {}
+    }
+
+    async function dbClearAllBooks() {
+      try {
+        const db = await openLocalDB();
+        const tx = db.transaction('books', 'readwrite');
+        tx.objectStore('books').clear();
+      } catch(e) {}
+    }
+
+    // ALAPÉRTELMEZETT MINTA KÖNYVEK
     const SAMPLE_BOOKS = [
       {
         id: 'sample-1',
@@ -420,40 +474,31 @@
     let currentSentenceIdx = 0;
     let ttsRate = 1.0;
 
-    // FOLYAMATOS FELOLVASÁS ÉS SAFARI AKADÁS VÉDELEM
     let currentUtterance = null;
     let ttsKeepAliveTimer = null;
+    let saveTimeout = null;
 
-    // AUTHENTIKÁCIÓ ÉS ADATOK BETÖLTÉSE
+    // INICIALIZÁLÁS
     window.addEventListener('DOMContentLoaded', async () => {
       initTTS();
       loadStoredSettings();
       loadStoredFolderName();
       setupSelectionListener();
 
-      try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
-      } catch (e) {
-        console.warn("Auth fallback:", e);
+      const storedBooks = await dbLoadAllBooks();
+      if (storedBooks && storedBooks.length > 0) {
+        myLibrary = storedBooks;
+      } else {
+        myLibrary = [...SAMPLE_BOOKS];
+        await dbSaveBook(SAMPLE_BOOKS[0]);
       }
 
-      onAuthStateChanged(auth, (user) => {
-        currentUser = user;
-        if (user) {
-          setupFirestoreListeners(user.uid);
-        } else {
-          myLibrary = [...SAMPLE_BOOKS];
-          loadBookFromLibrary('sample-1');
-        }
-      });
+      const activeId = localStorage.getItem('ebook_active_book_id') || myLibrary[0].id;
+      loadBookFromLibrary(myLibrary.some(b => b.id === activeId) ? activeId : myLibrary[0].id);
     });
 
     // TOAST ÉRTSÍTÉSEK
-    window.showToast = function(msg) {
+    function showToast(msg) {
       const toast = document.getElementById('toast-notification');
       if (!toast) return;
       toast.innerText = msg;
@@ -461,27 +506,111 @@
       setTimeout(() => {
         toast.classList.add('opacity-0', 'pointer-events-none');
       }, 2500);
-    };
+    }
 
     // CONFIRM MODAL
     let confirmCallback = null;
-    window.showConfirm = function(msg, callback) {
+    function showConfirm(msg, callback) {
       const modal = document.getElementById('confirm-modal');
       const text = document.getElementById('confirm-modal-text');
       if (!modal || !text) return;
       text.innerText = msg;
       confirmCallback = callback;
       modal.classList.remove('opacity-0', 'pointer-events-none');
-    };
+    }
 
-    window.closeConfirmModal = function(confirmed) {
+    function closeConfirmModal(confirmed) {
       const modal = document.getElementById('confirm-modal');
       if (modal) modal.classList.add('opacity-0', 'pointer-events-none');
       if (confirmed && typeof confirmCallback === 'function') {
         confirmCallback();
       }
       confirmCallback = null;
-    };
+    }
+
+    // BIZTONSÁGI MENTÉS (EXPORT / IMPORT)
+    function exportBackupToFile() {
+      if (!myLibrary || myLibrary.length === 0) {
+        showToast("Nincs menthető könyv.");
+        return;
+      }
+
+      const backupData = {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        folderName: myFolderName,
+        activeBookId: currentBookId,
+        library: myLibrary,
+        bookmarks: bookmarks,
+        highlights: highlights,
+        notes: notes
+      };
+
+      const jsonStr = JSON.stringify(backupData, null, 2);
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `homebook_biztonsagi_mentes_${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      showToast("Biztonsági mentés letöltve!");
+    }
+
+    async function importBackupFromFile(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      showProgress("Visszaállítás", "Mentés beolvasása...", 30);
+
+      try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+
+        if (!data || !data.library || !Array.isArray(data.library)) {
+          throw new Error("Érvénytelen mentési fájl.");
+        }
+
+        updateProgress("Könyvtár frissítése...", 60);
+        await dbClearAllBooks();
+
+        myLibrary = data.library;
+        for (const b of myLibrary) {
+          await dbSaveBook(b);
+        }
+
+        if (data.folderName) {
+          myFolderName = data.folderName;
+          localStorage.setItem('ebook_folder_name', myFolderName);
+          loadStoredFolderName();
+        }
+
+        if (data.bookmarks) bookmarks = data.bookmarks;
+        if (data.highlights) highlights = data.highlights;
+        if (data.notes) notes = data.notes;
+
+        const activeId = data.activeBookId && myLibrary.some(b => b.id === data.activeBookId) 
+          ? data.activeBookId 
+          : myLibrary[0].id;
+
+        updateProgress("Könyvek betöltése...", 90);
+        loadBookFromLibrary(activeId);
+
+        hideProgress();
+        renderMyBookshelf('my-books');
+        showToast("Sikeresen visszaállítva!");
+
+      } catch (e) {
+        hideProgress();
+        showToast("Hibás mentési fájl!");
+      }
+
+      event.target.value = '';
+    }
 
     // MAPPA NÉV MENTÉS ÉS BEÁLLÍTÁS
     function loadStoredFolderName() {
@@ -493,77 +622,29 @@
       if (input) input.value = myFolderName;
     }
 
-    window.saveFolderNameInput = function(val) {
+    function saveFolderNameInput(val) {
       myFolderName = val.trim() || "Ebook";
       localStorage.setItem('ebook_folder_name', myFolderName);
-    };
-
-    // FIRESTORE LISTENEREK
-    function setupFirestoreListeners(userId) {
-      const booksCol = collection(db, 'artifacts', appId, 'users', userId, 'books');
-      
-      onSnapshot(booksCol, (snapshot) => {
-        const loadedBooks = [];
-        snapshot.forEach(doc => {
-          loadedBooks.push(doc.data());
-        });
-
-        if (loadedBooks.length > 0) {
-          myLibrary = loadedBooks;
-          
-          const stateDocRef = doc(db, 'artifacts', appId, 'users', userId, 'state', 'current');
-          getDoc(stateDocRef).then(sDoc => {
-            if (sDoc.exists() && sDoc.data().activeBookId) {
-              const activeId = sDoc.data().activeBookId;
-              if (myLibrary.some(b => b.id === activeId)) {
-                loadBookFromLibrary(activeId);
-                return;
-              }
-            }
-            loadBookFromLibrary(myLibrary[0].id);
-          });
-
-        } else {
-          myLibrary = [...SAMPLE_BOOKS];
-          SAMPLE_BOOKS.forEach(b => {
-            setDoc(doc(db, 'artifacts', appId, 'users', userId, 'books', b.id), b);
-          });
-          loadBookFromLibrary('sample-1');
-        }
-      }, (err) => {
-        console.error("Firestore hiba:", err);
-        myLibrary = [...SAMPLE_BOOKS];
-        loadBookFromLibrary('sample-1');
-      });
     }
 
-    function saveReadingProgressToCloud() {
-      if (!currentUser || !book || !book.id) return;
+    function saveReadingProgressToLocal() {
+      if (!book || !book.id) return;
 
       clearTimeout(saveTimeout);
       saveTimeout = setTimeout(async () => {
-        try {
-          const bookRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'books', book.id);
-          await updateDoc(bookRef, {
-            lastSeenPIdx: lastSeenPIdx,
-            status: book.status || 'folyamatban'
-          });
-
-          const stateRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'state', 'current');
-          await setDoc(stateRef, {
-            activeBookId: book.id,
-            lastSeenPIdx: lastSeenPIdx,
-            updatedAt: Date.now()
-          }, { merge: true });
-
-        } catch (e) {
-          console.warn("Mentési hiba:", e);
+        book.lastSeenPIdx = lastSeenPIdx;
+        const bIdx = myLibrary.findIndex(b => b.id === book.id);
+        if (bIdx !== -1) {
+          myLibrary[bIdx].lastSeenPIdx = lastSeenPIdx;
+          myLibrary[bIdx].status = book.status || 'folyamatban';
         }
-      }, 500);
+        localStorage.setItem('ebook_active_book_id', book.id);
+        await dbSaveBook(book);
+      }, 300);
     }
 
     // FOLYAMAT INDIKÁTOR
-    window.showProgress = function(title, status, percent = 0) {
+    function showProgress(title, status, percent = 0) {
       const modal = document.getElementById('progress-modal');
       document.getElementById('progress-title').innerText = title;
       document.getElementById('progress-status').innerText = status;
@@ -571,23 +652,24 @@
       modal.classList.remove('opacity-0', 'pointer-events-none');
     }
 
-    window.updateProgress = function(status, percent) {
+    function updateProgress(status, percent) {
       document.getElementById('progress-status').innerText = status;
       document.getElementById('progress-bar-fill').style.width = `${percent}%`;
     }
 
-    window.hideProgress = function() {
+    function hideProgress() {
       const modal = document.getElementById('progress-modal');
       modal.classList.add('opacity-0', 'pointer-events-none');
     }
 
-    window.loadBookFromLibrary = function(bookId) {
+    function loadBookFromLibrary(bookId) {
       const found = myLibrary.find(b => b.id === bookId);
       if (found) {
         currentBookId = bookId;
         book = found;
         lastSeenPIdx = book.lastSeenPIdx || 0;
         document.getElementById('app-title').innerText = book.title;
+        localStorage.setItem('ebook_active_book_id', bookId);
         renderBook();
         
         setTimeout(() => {
@@ -627,7 +709,7 @@
       }
     }
 
-    window.changeVoice = function(idx) {
+    function changeVoice(idx) {
       if (huVoices[idx]) {
         selectedVoice = huVoices[idx];
         if (isSpeaking) speakSentence(true);
@@ -666,7 +748,7 @@
     }
 
     // EPUB / TXT / PDF FELTÖLTÉS IPHONE EBOOK MAP PÁBÓL
-    window.handleFileUpload = async function(event) {
+    async function handleFileUpload(event) {
       const files = Array.from(event.target.files);
       if (!files || files.length === 0) return;
 
@@ -756,16 +838,12 @@
       };
 
       myLibrary.unshift(newBook);
-      
-      if (currentUser) {
-        await setDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'books', newBook.id), newBook);
-      }
-
+      await dbSaveBook(newBook);
       loadBookFromLibrary(newBook.id);
     }
 
     // FORDÍTÁS
-    window.translateCurrentContent = async function() {
+    async function translateCurrentContent() {
       const total = book.paragraphs.length;
       if (total === 0) return;
 
@@ -809,7 +887,7 @@
       }
     }
 
-    window.toggleLibraryModal = function() {
+    function toggleLibraryModal() {
       const modal = document.getElementById('library-modal');
       if (modal.classList.contains('opacity-0')) {
         modal.classList.remove('opacity-0', 'pointer-events-none');
@@ -820,7 +898,7 @@
       }
     }
 
-    window.switchLibraryTab = function(tab) {
+    function switchLibraryTab(tab) {
       document.getElementById('lib-tab-my').className = "px-4 py-2 text-slate-400 shrink-0";
       document.getElementById('lib-tab-translated').className = "px-4 py-2 text-slate-400 shrink-0";
 
@@ -897,16 +975,14 @@
       });
     }
 
-    window.deleteBookFromLibrary = function(id, tab) {
+    function deleteBookFromLibrary(id, tab) {
       if (myLibrary.length <= 1) {
         showToast("Legalább egy könyvnek maradnia kell!");
         return;
       }
       showConfirm("Biztosan törölni szeretnéd ezt a könyvet?", async () => {
         myLibrary = myLibrary.filter(b => b.id !== id);
-        if (currentUser) {
-          await deleteDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'books', id));
-        }
+        await dbDeleteBook(id);
         if (currentBookId === id) {
           loadBookFromLibrary(myLibrary[0].id);
         }
@@ -943,7 +1019,7 @@
       });
     }
 
-    window.translateSelectedText = async function() {
+    async function translateSelectedText() {
       const text = window.getSelection().toString().trim();
       if (!text) return;
       
@@ -964,12 +1040,12 @@
       }
     }
 
-    window.closeTranslationModal = function() {
+    function closeTranslationModal() {
       const modal = document.getElementById('translation-result-modal');
       if (modal) modal.classList.add('opacity-0', 'pointer-events-none');
-    };
+    }
 
-    window.applyHighlight = function(color) {
+    function applyHighlight(color) {
       const selection = window.getSelection();
       if (!selection.anchorNode) return;
 
@@ -983,7 +1059,7 @@
       }
     }
 
-    window.addNoteFromSelection = function() {
+    function addNoteFromSelection() {
       const text = window.getSelection().toString().trim();
       if (!text) return;
       
@@ -994,7 +1070,7 @@
       if (modal) modal.classList.remove('opacity-0', 'pointer-events-none');
     }
 
-    window.closeNoteModal = function(save) {
+    function closeNoteModal(save) {
       const modal = document.getElementById('note-modal');
       if (modal) modal.classList.add('opacity-0', 'pointer-events-none');
       if (save) {
@@ -1005,21 +1081,21 @@
         }
       }
       pendingNoteQuote = "";
-    };
+    }
 
-    window.addBookmark = function() {
+    function addBookmark() {
       const title = `Könyvjelző (${lastSeenPIdx + 1}. bekezdés)`;
       bookmarks.push({ title, pIdx: lastSeenPIdx, id: Date.now() });
       showToast("Könyvjelző hozzáadva!");
     }
 
-    window.deleteBookmark = function(idx) {
+    function deleteBookmark(idx) {
       bookmarks.splice(idx, 1);
       renderDrawerContent('marks');
       showToast("Könyvjelző törölve.");
     }
 
-    window.updateReadingProgress = function() {
+    function updateReadingProgress() {
       const container = document.getElementById('reader-container');
       const progress = (container.scrollTop / (container.scrollHeight - container.clientHeight)) * 100;
       const rounded = Math.min(100, Math.max(0, Math.round(progress || 0)));
@@ -1038,7 +1114,7 @@
         }
       });
 
-      saveReadingProgressToCloud();
+      saveReadingProgressToLocal();
 
       const drawer = document.getElementById('drawer');
       if (!drawer.classList.contains('opacity-0')) {
@@ -1046,7 +1122,7 @@
       }
     }
 
-    window.previousChapter = function() {
+    function previousChapter() {
       if (!book.chapters || book.chapters.length === 0) return;
       let currentChIdx = book.chapters.findIndex(ch => lastSeenPIdx >= ch.startP && lastSeenPIdx <= ch.endP);
       if (currentChIdx > 0) {
@@ -1056,7 +1132,7 @@
       }
     }
 
-    window.nextChapter = function() {
+    function nextChapter() {
       if (!book.chapters || book.chapters.length === 0) return;
       let currentChIdx = book.chapters.findIndex(ch => lastSeenPIdx >= ch.startP && lastSeenPIdx <= ch.endP);
       if (currentChIdx !== -1 && currentChIdx < book.chapters.length - 1) {
@@ -1070,7 +1146,7 @@
         target.scrollIntoView({ behavior: 'smooth', block: 'start' });
         lastSeenPIdx = pIdx;
         book.lastSeenPIdx = pIdx;
-        if (save) saveReadingProgressToCloud();
+        if (save) saveReadingProgressToLocal();
         syncTTSToParagraph(pIdx);
       }
     }
@@ -1106,7 +1182,7 @@
       });
     }
 
-    window.toggleTTS = function() {
+    function toggleTTS() {
       if (isSpeaking) pauseTTS();
       else startTTS();
     }
@@ -1176,8 +1252,8 @@
       currentUtterance.onend = () => {
         if (isSpeaking) {
           currentSentenceIdx++;
-          speakSentence(false); // Folyamatos haladás mondatról mondatra
-          saveReadingProgressToCloud();
+          speakSentence(false);
+          saveReadingProgressToLocal();
         }
       };
 
@@ -1209,7 +1285,7 @@
       document.querySelectorAll('.tts-active').forEach(el => el.classList.remove('tts-active'));
     }
 
-    window.changeTTSSpeed = function() {
+    function changeTTSSpeed() {
       if (ttsRate === 1.0) ttsRate = 1.25;
       else if (ttsRate === 1.25) ttsRate = 1.5;
       else if (ttsRate === 1.5) ttsRate = 0.8;
@@ -1219,7 +1295,7 @@
       if (isSpeaking) speakSentence(true);
     }
 
-    window.toggleDrawer = function() {
+    function toggleDrawer() {
       const drawer = document.getElementById('drawer');
       const panel = document.getElementById('drawer-panel');
 
@@ -1233,7 +1309,7 @@
       }
     }
 
-    window.switchTab = function(tab) {
+    function switchTab(tab) {
       document.querySelectorAll('#drawer button').forEach(b => {
         b.classList.remove('text-indigo-400', 'border-b-2', 'border-indigo-500');
         b.classList.add('text-slate-400');
@@ -1323,7 +1399,7 @@
       }
     }
 
-    window.toggleSearchModal = function() {
+    function toggleSearchModal() {
       const modal = document.getElementById('search-modal');
       if (modal.classList.contains('opacity-0')) {
         modal.classList.remove('opacity-0', 'pointer-events-none');
@@ -1333,7 +1409,7 @@
       }
     }
 
-    window.performSearch = function() {
+    function performSearch() {
       const query = document.getElementById('search-input').value.toLowerCase().trim();
       const resultsContainer = document.getElementById('search-results');
       resultsContainer.innerHTML = '';
@@ -1365,7 +1441,7 @@
       }, 100);
     }
 
-    window.toggleSettingsModal = function() {
+    function toggleSettingsModal() {
       const modal = document.getElementById('settings-modal');
       const sheet = document.getElementById('settings-sheet');
       
@@ -1378,7 +1454,7 @@
       }
     }
 
-    window.setTheme = function(theme) {
+    function setTheme(theme) {
       currentTheme = theme;
       const body = document.body;
       body.classList.remove('bg-slate-900', 'text-slate-100', 'bg-sepia-bg', 'text-sepia-text', 'bg-white', 'text-slate-900');
@@ -1390,13 +1466,13 @@
       localStorage.setItem('ebook_theme', theme);
     }
 
-    window.updateFontSize = function(val) {
+    function updateFontSize(val) {
       currentFontSize = val;
       document.getElementById('lbl-font-size').innerText = `${val}px`;
       document.querySelectorAll('#reader-content p').forEach(p => p.style.fontSize = `${val}px`);
     }
 
-    window.updateLineHeight = function(val) {
+    function updateLineHeight(val) {
       currentLineHeight = val;
       document.getElementById('lbl-line-height').innerText = val;
       document.querySelectorAll('#reader-content p').forEach(p => p.style.lineHeight = val);
