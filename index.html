@@ -519,7 +519,7 @@
   </div>
 
   <script>
-    const DB_NAME = 'HomeEbookDB_v16';
+    const DB_NAME = 'HomeEbookDB_v17';
     const DB_VERSION = 1;
 
     // ELKERÜLHETETLEN iOS GC VÉDELEM: Globális hivatkozások a böngészős leállások kivédésére
@@ -737,10 +737,94 @@
           if (!db.objectStoreNames.contains('books')) {
             db.createObjectStore('books', { keyPath: 'id' });
           }
+          if (!db.objectStoreNames.contains('audio_cache')) {
+            const cacheStore = db.createObjectStore('audio_cache', { keyPath: 'cacheKey' });
+            cacheStore.createIndex('lastAccessed', 'lastAccessed', { unique: false });
+          }
         };
         req.onsuccess = (e) => resolve(e.target.result);
         req.onerror = (e) => reject(e);
       });
+    }
+
+    function getAudioCacheKey(text, voice) {
+      let hash = 0;
+      const str = `${voice}_${text.trim()}`;
+      for (let i = 0; i < str.length; i++) {
+        const char = str.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash |= 0;
+      }
+      return `cache_${Math.abs(hash).toString(36)}_${text.length}`;
+    }
+
+    async function dbGetAudioCache(cacheKey) {
+      try {
+        const db = await openLocalDB();
+        if (!db.objectStoreNames.contains('audio_cache')) return null;
+        return new Promise((resolve) => {
+          const tx = db.transaction('audio_cache', 'readwrite');
+          const store = tx.objectStore('audio_cache');
+          const req = store.get(cacheKey);
+          req.onsuccess = () => {
+            const record = req.result;
+            if (record && record.blob) {
+              record.lastAccessed = Date.now();
+              store.put(record);
+              resolve(record.blob);
+            } else {
+              resolve(null);
+            }
+          };
+          req.onerror = () => resolve(null);
+        });
+      } catch(e) {
+        return null;
+      }
+    }
+
+    async function dbPutAudioCache(cacheKey, blob, text) {
+      try {
+        const db = await openLocalDB();
+        if (!db.objectStoreNames.contains('audio_cache')) return;
+        const tx = db.transaction('audio_cache', 'readwrite');
+        const store = tx.objectStore('audio_cache');
+        store.put({
+          cacheKey,
+          blob,
+          text: (text || '').substring(0, 80),
+          size: blob.size || 0,
+          timestamp: Date.now(),
+          lastAccessed: Date.now()
+        });
+        dbPruneAudioCache();
+      } catch(e) {}
+    }
+
+    async function dbPruneAudioCache(maxEntries = 600) {
+      try {
+        const db = await openLocalDB();
+        if (!db.objectStoreNames.contains('audio_cache')) return;
+        const tx = db.transaction('audio_cache', 'readwrite');
+        const store = tx.objectStore('audio_cache');
+        const countReq = store.count();
+        countReq.onsuccess = () => {
+          const total = countReq.result;
+          if (total > maxEntries) {
+            const deleteCount = total - maxEntries;
+            const index = store.index('lastAccessed');
+            let deleted = 0;
+            index.openCursor().onsuccess = (e) => {
+              const cursor = e.target.result;
+              if (cursor && deleted < deleteCount) {
+                cursor.delete();
+                deleted++;
+                cursor.continue();
+              }
+            };
+          }
+        };
+      } catch(e) {}
     }
 
     async function dbSaveBook(bookObj) {
@@ -2055,6 +2139,52 @@
       });
     }
 
+    async function checkAudioCacheAndPlay(textToSay, voiceCode, onEndedCallback, sessionToken) {
+      const cacheKey = getAudioCacheKey(textToSay, voiceCode);
+      const cachedBlob = await dbGetAudioCache(cacheKey);
+      if (cachedBlob && cachedBlob.size > 100) {
+        logApp("CACHE_HIT", `⚡ 0ms Gyorsítótár: Helyi lemezről betöltve (${cachedBlob.size} bájt) [${voiceCode}]`, { text: textToSay.substring(0, 40) });
+        if (currentGTTSBlobUrl) {
+          URL.revokeObjectURL(currentGTTSBlobUrl);
+        }
+        currentGTTSBlobUrl = URL.createObjectURL(cachedBlob);
+        globalAudioPlayer.src = currentGTTSBlobUrl;
+        globalAudioPlayer.playbackRate = ttsRate;
+
+        let hasEnded = false;
+        const safeEnd = () => {
+          if (hasEnded || sessionToken !== currentTTSSessionToken) return;
+          hasEnded = true;
+          clearTimeout(playbackSafetyTimeout);
+          clearInterval(audioWatchdogInterval);
+          logApp("TTS_SUCCESS", "Sikeres gyorsítótárazott (0ms) felolvasás");
+          if (typeof onEndedCallback === 'function') onEndedCallback();
+        };
+
+        globalAudioPlayer.onended = safeEnd;
+        globalAudioPlayer.ontimeupdate = () => {
+          if (sessionToken !== currentTTSSessionToken || hasEnded) return;
+          const dur = globalAudioPlayer.duration;
+          const curr = globalAudioPlayer.currentTime;
+          if (dur > 0 && isFinite(dur) && curr >= dur - 0.1) {
+            safeEnd();
+          }
+        };
+
+        globalAudioPlayer.onerror = () => {
+          safeEnd();
+        };
+
+        globalAudioPlayer.play().then(() => {
+          logApp("TTS_PLAYING", "Helyi gyorsítótár lejátszás elindult (0ms)");
+        }).catch(() => {
+          safeEnd();
+        });
+        return true;
+      }
+      return false;
+    }
+
     async function playAzureSpeechRestTTS(textToSay, voiceName, apiKey, region, onEndedCallback, sessionToken) {
       try {
         const rateDiff = Math.round((ttsRate - 1.0) * 100);
@@ -2084,6 +2214,10 @@
 
         const blob = await response.blob();
         if (sessionToken !== currentTTSSessionToken || !isSpeaking) return true;
+
+        // Mentés a helyi 0ms-os gyorsítótárba
+        const cacheKey = getAudioCacheKey(textToSay, `edge-${voiceName}`);
+        dbPutAudioCache(cacheKey, blob, textToSay);
 
         if (currentGTTSBlobUrl) {
           URL.revokeObjectURL(currentGTTSBlobUrl);
@@ -2130,6 +2264,10 @@
     async function playEdgeNeuralTTS(textToSay, voiceCode, onEndedCallback) {
       const sessionToken = currentTTSSessionToken;
       const voiceName = voiceCode.replace('edge-', '');
+
+      // 0. Gyorsítótár ellenőrzése (0ms azonnali lejátszás)
+      const isCached = await checkAudioCacheAndPlay(textToSay, voiceCode, onEndedCallback, sessionToken);
+      if (isCached) return;
 
       logApp("EDGE_TTS_REQ", `Microsoft Edge / Azure Neural TTS kérés #${sessionToken} (${voiceName})`, {
         text: textToSay.substring(0, 40),
@@ -2310,6 +2448,10 @@
     async function playGTTS(textToSay, onEndedCallback) {
       stopAudioPlayback();
       const sessionToken = ++currentTTSSessionToken;
+
+      // 0. Gyorsítótár ellenőrzése (0ms azonnali lejátszás)
+      const isCached = await checkAudioCacheAndPlay(textToSay, 'gtts-hu', onEndedCallback, sessionToken);
+      if (isCached) return;
 
       logApp("TTS_REQ", `gTTS kérés #${sessionToken}`, { text: textToSay.substring(0, 40), length: textToSay.length });
 
