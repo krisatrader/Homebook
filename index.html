@@ -2152,6 +2152,7 @@
     }
 
     function stopAudioPlayback() {
+      // Teljes leállítás (TTS megszakítás / hang váltás esetén)
       clearTimeout(playbackSafetyTimeout);
       clearInterval(audioWatchdogInterval);
       if (playerA) {
@@ -2175,6 +2176,22 @@
         standbyBlobUrl = null;
       }
       standbySentenceIdx = -1;
+    }
+
+    function softStopActivePlayer() {
+      // Csak az aktív lejátszó eseménykezelőit szünteti meg, a standby puffer érintetlen marad
+      clearTimeout(playbackSafetyTimeout);
+      clearInterval(audioWatchdogInterval);
+      if (activePlayer) {
+        activePlayer.pause();
+        activePlayer.onended = null;
+        activePlayer.onerror = null;
+        activePlayer.ontimeupdate = null;
+      }
+      if (currentAudioBlobUrl) {
+        URL.revokeObjectURL(currentAudioBlobUrl);
+        currentAudioBlobUrl = null;
+      }
     }
 
     function toggleAzureSettings() {
@@ -2565,9 +2582,6 @@
 
       if (checkChapterEndSleepTimer()) return;
 
-      stopAudioPlayback();
-      synth.cancel();
-
       const item = ttsSentences[currentSentenceIdx];
       lastSeenPIdx = item.pIdx;
       book.lastSeenPIdx = item.pIdx;
@@ -2599,6 +2613,9 @@
 
       // 1. MICROSOFT AZURE & EDGE NEURAL TTS MOTOR (ELSŐDLEGES & ALAPÉRTELMEZETT)
       if (selectedEdgeVoice.startsWith('edge-')) {
+        // Soft stop: csak az aktív lejátszó eseményeit töröljük, a standby puffer érintetlen marad!
+        softStopActivePlayer();
+        synth.cancel();
         const isTamas = selectedEdgeVoice.includes('Tamas');
         const statElem = document.getElementById('tts-status');
         if (statElem) statElem.innerText = `🌟 ${isTamas ? 'Tamás (Férfi)' : 'Noémi (Női)'}: ${currentSentenceIdx + 1}/${ttsSentences.length}`;
@@ -2607,6 +2624,9 @@
       }
 
       // 2. ELÉRHETŐ ESZKÖZ / RENDSZER NATÍV TTS HANGOK
+      // Teljes stop natív hangoknál (nem edge) – nincs standby puffer
+      stopAudioPlayback();
+      synth.cancel();
       const isSystemHungarian = (selectedEdgeVoice === 'system-hu');
       const voiceObj = isSystemHungarian ? null : getSelectedNativeVoiceObj();
       const voiceName = isSystemHungarian ? "Tünde (Továbbfejlesztett rendszerhang)" : (voiceObj ? `${voiceObj.name} (${voiceObj.lang})` : "Rendszerhang");
