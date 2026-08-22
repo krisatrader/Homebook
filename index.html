@@ -329,16 +329,39 @@
       </div>
 
       <div class="space-y-1.5">
-        <label class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Olvasási Téma</label>
+        <label class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Olvasási Séma</label>
         <div class="grid grid-cols-3 gap-2">
-          <button onclick="setTheme('dark')" class="p-2.5 rounded-xl border border-slate-700 bg-slate-900 text-slate-100 font-medium text-xs flex flex-col items-center gap-1 hover:border-indigo-500 transition">
-            <span class="w-3.5 h-3.5 rounded-full bg-slate-900 border border-slate-600"></span> Sötét
+          <!-- Sötét séma -->
+          <button type="button" id="theme-btn-dark" onclick="setTheme('dark')" class="p-2.5 rounded-xl border border-slate-700 bg-slate-900 text-slate-100 font-semibold text-xs flex flex-col items-center gap-1.5 hover:border-indigo-500 transition active:scale-95 cursor-pointer">
+            <div class="flex items-center gap-1.5">
+              <span class="w-3.5 h-3.5 rounded-full bg-slate-900 border border-slate-600"></span>
+              <span>Sötét</span>
+            </div>
+            <div id="theme-chk-dark" class="flex items-center justify-center pt-0.5">
+              <span class="w-4 h-4 rounded border border-indigo-400 bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold">✓</span>
+            </div>
           </button>
-          <button onclick="setTheme('sepia')" class="p-2.5 rounded-xl border border-sepia-border bg-sepia-bg text-sepia-text font-medium text-xs flex flex-col items-center gap-1 hover:border-amber-600 transition">
-            <span class="w-3.5 h-3.5 rounded-full bg-sepia-bg border border-amber-800"></span> Szépia
+
+          <!-- Szépia séma -->
+          <button type="button" id="theme-btn-sepia" onclick="setTheme('sepia')" class="p-2.5 rounded-xl border border-sepia-border bg-sepia-bg text-sepia-text font-semibold text-xs flex flex-col items-center gap-1.5 hover:border-amber-600 transition active:scale-95 cursor-pointer">
+            <div class="flex items-center gap-1.5">
+              <span class="w-3.5 h-3.5 rounded-full bg-sepia-bg border border-amber-800"></span>
+              <span>Szépia</span>
+            </div>
+            <div id="theme-chk-sepia" class="flex items-center justify-center pt-0.5">
+              <span class="w-4 h-4 rounded border border-slate-600 bg-slate-800/40 flex items-center justify-center text-[10px]"></span>
+            </div>
           </button>
-          <button onclick="setTheme('light')" class="p-2.5 rounded-xl border border-gray-300 bg-white text-slate-900 font-medium text-xs flex flex-col items-center gap-1 hover:border-blue-500 transition">
-            <span class="w-3.5 h-3.5 rounded-full bg-white border border-gray-400"></span> Világos
+
+          <!-- Világos séma -->
+          <button type="button" id="theme-btn-light" onclick="setTheme('light')" class="p-2.5 rounded-xl border border-gray-300 bg-white text-slate-900 font-semibold text-xs flex flex-col items-center gap-1.5 hover:border-blue-500 transition active:scale-95 cursor-pointer">
+            <div class="flex items-center gap-1.5">
+              <span class="w-3.5 h-3.5 rounded-full bg-white border border-gray-400"></span>
+              <span>Világos</span>
+            </div>
+            <div id="theme-chk-light" class="flex items-center justify-center pt-0.5">
+              <span class="w-4 h-4 rounded border border-slate-600 bg-slate-800/40 flex items-center justify-center text-[10px]"></span>
+            </div>
           </button>
         </div>
       </div>
@@ -1734,6 +1757,29 @@
       if (theme === 'dark') body.classList.add('bg-slate-900', 'text-slate-100');
       else if (theme === 'sepia') body.classList.add('bg-sepia-bg', 'text-sepia-text');
       else body.classList.add('bg-white', 'text-slate-900');
+
+      const themes = ['dark', 'sepia', 'light'];
+      themes.forEach(t => {
+        const btn = document.getElementById(`theme-btn-${t}`);
+        const chk = document.getElementById(`theme-chk-${t}`);
+        const isSelected = (t === theme);
+
+        if (btn) {
+          if (isSelected) {
+            btn.classList.add('ring-2', 'ring-indigo-500', 'border-indigo-500');
+          } else {
+            btn.classList.remove('ring-2', 'ring-indigo-500', 'border-indigo-500');
+          }
+        }
+
+        if (chk) {
+          if (isSelected) {
+            chk.innerHTML = `<span class="w-4 h-4 rounded border border-indigo-400 bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold shadow-sm">✓</span>`;
+          } else {
+            chk.innerHTML = `<span class="w-4 h-4 rounded border border-slate-600/70 bg-slate-800/40 flex items-center justify-center text-[10px]"></span>`;
+          }
+        }
+      });
 
       localStorage.setItem('ebook_theme', theme);
     }
