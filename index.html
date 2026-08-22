@@ -688,6 +688,8 @@
     let ttsRate = parseFloat(localStorage.getItem('ebook_tts_rate') || '1.0');
     
     let globalAudioPlayer = new Audio();
+    let preloadAudioPlayer = new Audio();
+    let audioWatchdogInterval = null;
     let currentTTSSessionToken = 0;
     let currentGTTSBlobUrl = null;
     let playbackSafetyTimeout = null;
@@ -1756,10 +1758,12 @@
 
     function stopAudioPlayback() {
       clearTimeout(playbackSafetyTimeout);
+      clearInterval(audioWatchdogInterval);
       if (globalAudioPlayer) {
         globalAudioPlayer.pause();
         globalAudioPlayer.onended = null;
         globalAudioPlayer.onerror = null;
+        globalAudioPlayer.ontimeupdate = null;
       }
       if (currentGTTSBlobUrl) {
         URL.revokeObjectURL(currentGTTSBlobUrl);
@@ -1790,6 +1794,7 @@
 
       const proceedToNext = () => {
         clearTimeout(playbackSafetyTimeout);
+        clearInterval(audioWatchdogInterval);
         clearTimeout(window.speechWatchdog);
         window.activeUtterance = null;
 
@@ -1873,6 +1878,16 @@
         { name: "Google API (gtx)", url: `https://translate.googleapis.com/translate_tts?client=gtx&ie=UTF-8&tl=hu&q=${encodedText}` }
       ];
 
+      // Következő mondat előtöltése a háttérben a hálózati késleltetés megszüntetésére
+      if (currentSentenceIdx + 1 < ttsSentences.length) {
+        const nextText = ttsSentences[currentSentenceIdx + 1].text;
+        const nextUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=hu&client=tw-ob&q=${encodeURIComponent(nextText)}`;
+        try {
+          preloadAudioPlayer.src = nextUrl;
+          preloadAudioPlayer.preload = 'auto';
+        } catch(e) {}
+      }
+
       const trySource = (idx) => {
         if (!isSpeaking || sessionToken !== currentTTSSessionToken) {
           logApp("TTS_ABORT", `Kérés #${sessionToken} megszakítva (isSpeaking=${isSpeaking})`);
@@ -1880,6 +1895,7 @@
         }
 
         clearTimeout(playbackSafetyTimeout);
+        clearInterval(audioWatchdogInterval);
 
         if (idx >= sources.length) {
           logApp("TTS_FAIL_ALL", `Minden online TTS forrás sikertelen a #${sessionToken} kérésnél.`);
@@ -1899,30 +1915,72 @@
           if (hasEnded || sessionToken !== currentTTSSessionToken) return;
           hasEnded = true;
           clearTimeout(playbackSafetyTimeout);
+          clearInterval(audioWatchdogInterval);
+          globalAudioPlayer.ontimeupdate = null;
           logApp("TTS_SUCCESS", `Sikeres felolvasás: ${source.name}`);
           if (typeof onEndedCallback === 'function') onEndedCallback();
         };
 
         globalAudioPlayer.onended = safeEnd;
+        globalAudioPlayer.ontimeupdate = () => {
+          if (sessionToken !== currentTTSSessionToken || hasEnded) return;
+          const dur = globalAudioPlayer.duration;
+          const curr = globalAudioPlayer.currentTime;
+          if (dur > 0 && isFinite(dur) && curr >= dur - 0.12) {
+            safeEnd();
+          }
+        };
+
         globalAudioPlayer.onerror = (e) => {
           if (sessionToken !== currentTTSSessionToken) return;
           clearTimeout(playbackSafetyTimeout);
+          clearInterval(audioWatchdogInterval);
           const mediaErr = globalAudioPlayer.error;
           const errInfo = mediaErr ? { code: mediaErr.code, message: mediaErr.message } : { info: "Hálózati/Dekódolási hiba" };
           logApp("TTS_ERROR", `${source.name} hiba`, errInfo);
           trySource(idx + 1);
         };
 
-        // Bőkezű időzítés a mondathosszhoz és a beszédsebességhez igazítva
-        const estDuration = Math.max(8000, (textToSay.length / (5 * ttsRate)) * 1000 + 5000);
+        // Reális időkorlát (kb. 12 karakter / másodperc)
+        const estDuration = Math.max(3800, (textToSay.length / (8 * ttsRate)) * 1000 + 2500);
         playbackSafetyTimeout = setTimeout(() => {
           if (sessionToken !== currentTTSSessionToken) return;
-          logApp("TTS_TIMEOUT", `${source.name} időtúllépés, továbblépés`);
+          logApp("TTS_TIMEOUT", `${source.name} biztonsági időzítő (${Math.round(estDuration)}ms) lejárt, továbblépés`);
           safeEnd();
         }, estDuration);
 
+        // Safari aktív lejátszásfigyelő (véletlenül kimaradt onended események elkapására)
+        let lastTime = -1;
+        let sameTimeCount = 0;
+        audioWatchdogInterval = setInterval(() => {
+          if (hasEnded || sessionToken !== currentTTSSessionToken || !isSpeaking) {
+            clearInterval(audioWatchdogInterval);
+            return;
+          }
+          if (globalAudioPlayer.ended) {
+            safeEnd();
+            return;
+          }
+          const curr = globalAudioPlayer.currentTime;
+          const dur = globalAudioPlayer.duration;
+          if (dur > 0 && isFinite(dur) && curr >= dur - 0.15) {
+            safeEnd();
+            return;
+          }
+          if (curr > 0.5 && Math.abs(curr - lastTime) < 0.05 && !globalAudioPlayer.paused) {
+            sameTimeCount++;
+            if (sameTimeCount >= 3) { // 300ms elakadás az audio végén
+              safeEnd();
+            }
+          } else {
+            sameTimeCount = 0;
+            lastTime = curr;
+          }
+        }, 100);
+
         globalAudioPlayer.play().then(() => {
           if (sessionToken === currentTTSSessionToken) {
+            globalAudioPlayer.playbackRate = ttsRate;
             logApp("TTS_PLAYING", `Audio lejátszás elindult: ${source.name}`);
           }
         }).catch(err => {
@@ -1932,6 +1990,7 @@
           }
           if (sessionToken !== currentTTSSessionToken) return;
           clearTimeout(playbackSafetyTimeout);
+          clearInterval(audioWatchdogInterval);
           logApp("TTS_PLAY_REJECTED", `${source.name} play() elutasítva`, { name: err.name, message: err.message });
           trySource(idx + 1);
         });
