@@ -1007,11 +1007,32 @@
       const fragment = document.createDocumentFragment();
 
       book.paragraphs.forEach((pText, idx) => {
+        // 1. Fejezet kezdőpont ellenőrzése a könyv metaadataiból
+        const chapter = book.chapters ? book.chapters.find(ch => ch.startP === idx) : null;
+        if (chapter && chapter.title && !chapter.title.startsWith(`${idx + 1}. Oldal`)) {
+          const chHeading = document.createElement('h1');
+          chHeading.className = `pt-8 pb-3 mt-6 mb-3 font-bold tracking-tight text-indigo-400 border-b border-indigo-500/20 flex items-center gap-2 ${currentFontFamily === 'serif' ? 'font-serif' : 'font-sans'}`;
+          chHeading.style.fontSize = `${Math.round(currentFontSize * 1.4)}px`;
+          chHeading.innerHTML = `<span class="text-sm opacity-80">📖</span> <span>${chapter.title}</span>`;
+          fragment.appendChild(chHeading);
+        }
+
+        // 2. Bekezdés vizsgálata: Címsor-e a szövege (pl. "1. Fejezet", "Chapter 1", stb.)
+        const isHeadingPattern = /^(\d+\.?\s*(fejezet|chapter|rész|szakasz)|fejezet\s*\d+|chapter\s*\d+|[IVXLCDM]+\.?\s*(fejezet|chapter)?\b)/i.test(pText.trim()) ||
+                                 (pText.trim().length <= 60 && /^(fejezet|chapter|epilogue|prologue|előszó|utószó)/i.test(pText.trim()));
+
         const p = document.createElement('p');
         p.id = `para-${idx}`;
-        p.className = `transition-all duration-150 leading-relaxed cursor-pointer hover:opacity-90 ${currentFontFamily === 'serif' ? 'font-serif' : 'font-sans'}`;
-        p.style.fontSize = `${currentFontSize}px`;
-        p.style.lineHeight = `${currentLineHeight}`;
+        
+        if (isHeadingPattern) {
+          p.className = `pt-6 pb-2 font-bold tracking-tight text-indigo-300 transition-all duration-150 cursor-pointer hover:opacity-90 ${currentFontFamily === 'serif' ? 'font-serif' : 'font-sans'}`;
+          p.style.fontSize = `${Math.round(currentFontSize * 1.3)}px`;
+          p.style.lineHeight = `1.4`;
+        } else {
+          p.className = `transition-all duration-150 leading-relaxed cursor-pointer hover:opacity-90 ${currentFontFamily === 'serif' ? 'font-serif' : 'font-sans'}`;
+          p.style.fontSize = `${currentFontSize}px`;
+          p.style.lineHeight = `${currentLineHeight}`;
+        }
         
         p.onclick = () => {
           if (window.getSelection().toString().trim().length === 0) {
@@ -2148,15 +2169,17 @@
     }
 
     function updateFontSize(val) {
-      currentFontSize = val;
-      document.getElementById('lbl-font-size').innerText = `${val}px`;
-      document.querySelectorAll('#reader-content p').forEach(p => p.style.fontSize = `${val}px`);
+      currentFontSize = parseInt(val);
+      document.getElementById('lbl-font-size').innerText = `${currentFontSize}px`;
+      document.querySelectorAll('#reader-content p:not(.font-bold)').forEach(p => p.style.fontSize = `${currentFontSize}px`);
+      document.querySelectorAll('#reader-content h1').forEach(h => h.style.fontSize = `${Math.round(currentFontSize * 1.4)}px`);
+      document.querySelectorAll('#reader-content p.font-bold').forEach(p => p.style.fontSize = `${Math.round(currentFontSize * 1.3)}px`);
     }
 
     function updateLineHeight(val) {
       currentLineHeight = val;
       document.getElementById('lbl-line-height').innerText = val;
-      document.querySelectorAll('#reader-content p').forEach(p => p.style.lineHeight = val);
+      document.querySelectorAll('#reader-content p:not(.font-bold)').forEach(p => p.style.lineHeight = val);
     }
 
     function loadStoredSettings() {
