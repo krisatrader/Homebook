@@ -2313,9 +2313,13 @@
         }
       }
 
-      // 4. Natív beszéd szintetizálás a megfelelő hangtónussal (Tamás = férfiasabb mély tónus, Noémi = normál tónus)
+      // 4. Fallback helyi rendszerhangra (Safari/Chrome nem tartalmaz Microsoft hangokat natívan)
       const isMaleVoice = voiceName.includes('Tamas') || voiceName.includes('Guy');
-      logApp("EDGE_SYNTH_DIRECT", `Neurális motor direkt szintézis: ${voiceName} (férfihang: ${isMaleVoice})`);
+      logApp("EDGE_SYNTH_FALLBACK", `Safari/Helyi hang szintézis: ${voiceName} (Valódi MS hanghoz Azure API kulcs vagy Microsoft Edge böngésző szükséges)`);
+      if (!window.hasShownAzureToast && !azureKey) {
+        window.hasShownAzureToast = true;
+        showToast("💡 Tipp: Valódi Microsoft Neural stúdióhanghoz nyisd meg Microsoft Edge-ben vagy adj meg Azure kulcsot a Beállításokban (⚙️)!");
+      }
       playNativeUtteranceWithVoice(textToSay, null, onEndedCallback, sessionToken, isMaleVoice ? 0.85 : 1.0);
     }
 
