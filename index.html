@@ -7,6 +7,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Home E-Book Pro">
   <meta name="theme-color" content="#0f172a">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/svg+xml" href="icon.svg">
+  <link rel="apple-touch-icon" href="icon.svg">
   <title>Home E-book Pro</title>
 
   <!-- JSZip, ePubJS és PDF.js a dokumentumok kibontásához -->
@@ -508,6 +511,9 @@
     let sleepTimerSecondsRemaining = 0;
 
     window.addEventListener('DOMContentLoaded', async () => {
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('./sw.js').catch(() => {});
+      }
       populateNativeVoices();
       loadStoredSettings();
       loadStoredFolderName();
@@ -1466,10 +1472,12 @@
           utter.onend = safeEnd;
           utter.onerror = (e) => {
             console.warn("Natív TTS hiba:", e);
-            safeEnd();
+            if (e.error === 'canceled' || e.error === 'interrupted') return;
+            showToast("Beszédszintetizátor hiba történt.");
+            pauseTTS();
           };
 
-          const estDuration = Math.max(3000, (item.text.length / (8 * ttsRate)) * 1000 + 3000);
+          const estDuration = Math.max(4000, (item.text.length / (8 * ttsRate)) * 1000 + 4000);
           window.speechWatchdog = setTimeout(() => {
             console.warn("Watchdog léptetés...");
             safeEnd();
@@ -1480,7 +1488,7 @@
           }
 
           synth.speak(utter);
-        }, 60);
+        }, 40);
 
         return;
       }
@@ -1506,17 +1514,20 @@
       globalAudioPlayer.onended = safeEnd;
       globalAudioPlayer.onerror = (e) => {
         console.warn("gTTS hiba:", e);
-        safeEnd();
+        showToast("Hálózati hiba a felolvasás során.");
+        pauseTTS();
       };
 
+      const estDuration = Math.max(5000, (textToSay.length / (8 * ttsRate)) * 1000 + 4000);
       playbackSafetyTimeout = setTimeout(() => {
         console.warn("gTTS biztonsági léptetés...");
         safeEnd();
-      }, 7000);
+      }, estDuration);
 
       globalAudioPlayer.play().catch(err => {
         console.warn("gTTS indítási hiba:", err);
-        safeEnd();
+        showToast("Hálózati hiba a felolvasás során.");
+        pauseTTS();
       });
     }
 

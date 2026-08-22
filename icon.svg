@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#312e81"/>
+      <stop offset="50%" stop-color="#4f46e5"/>
+      <stop offset="100%" stop-color="#7c3aed"/>
+    </linearGradient>
+    <linearGradient id="book-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#e0e7ff"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="110" fill="url(#bg-grad)"/>
+  <!-- Open Book Shape -->
+  <path d="M120 160 C 180 140, 240 165, 256 185 C 272 165, 332 140, 392 160 L 392 345 C 332 325, 272 350, 256 365 C 240 350, 180 325, 120 345 Z" fill="url(#book-grad)" opacity="0.95"/>
+  <path d="M256 185 L 256 365" stroke="#4338ca" stroke-width="6" stroke-linecap="round"/>
+  <!-- Audio Waves / Speaker Accent -->
+  <path d="M300 240 Q 330 255 300 270" stroke="#4f46e5" stroke-width="7" stroke-linecap="round" fill="none"/>
+  <path d="M320 225 Q 365 255 320 285" stroke="#6366f1" stroke-width="7" stroke-linecap="round" fill="none"/>
+</svg>
