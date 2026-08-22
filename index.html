@@ -669,6 +669,7 @@
     let notes = [];
     let lastSeenPIdx = 0;
     let pendingNoteQuote = "";
+    let pendingNotePIdx = null;
     let currentDrawerTab = 'toc';
 
     let currentFontSize = 18;
@@ -1384,11 +1385,22 @@
     }
 
     function addNoteFromSelection() {
-      const text = window.getSelection().toString().trim();
+      const selection = window.getSelection();
+      const text = selection ? selection.toString().trim() : '';
       if (!text) return;
+
+      let targetPIdx = lastSeenPIdx;
+      if (selection && selection.anchorNode) {
+        const pElem = selection.anchorNode.parentElement?.closest('p');
+        if (pElem && pElem.id && pElem.id.startsWith('para-')) {
+          targetPIdx = parseInt(pElem.id.replace('para-', ''));
+        }
+      }
       
+      pendingNotePIdx = targetPIdx;
       pendingNoteQuote = text;
-      document.getElementById('note-quote-preview').innerText = `"${text}"`;
+      
+      document.getElementById('note-quote-preview').innerText = `"${text}" (📍 ${targetPIdx + 1}. bekezdés)`;
       document.getElementById('note-text-input').value = '';
       const modal = document.getElementById('note-modal');
       if (modal) modal.classList.remove('opacity-0', 'pointer-events-none');
@@ -1400,12 +1412,24 @@
       if (save) {
         const noteText = document.getElementById('note-text-input').value.trim();
         if (noteText) {
-          notes.push({ text: noteText, quote: pendingNoteQuote, date: new Date().toISOString() });
+          const finalPIdx = (pendingNotePIdx !== null && pendingNotePIdx !== undefined) ? pendingNotePIdx : lastSeenPIdx;
+          notes.push({
+            id: Date.now(),
+            text: noteText,
+            quote: pendingNoteQuote,
+            pIdx: finalPIdx,
+            date: new Date().toISOString()
+          });
           saveMetadataToLocal();
-          showToast("Jegyzet elmentve!");
+          logApp("NOTE_SAVED", `Jegyzet mentve a(z) ${finalPIdx + 1}. bekezdéshez`, {
+            text: noteText,
+            quote: pendingNoteQuote.substring(0, 30)
+          });
+          showToast(`Jegyzet elmentve a(z) ${finalPIdx + 1}. bekezdéshez!`);
         }
       }
       pendingNoteQuote = "";
+      pendingNotePIdx = null;
     }
 
     function deleteNote(idx) {
@@ -1986,12 +2010,23 @@
         }
         notes.forEach((nt, idx) => {
           const item = document.createElement('div');
-          item.className = "p-3 bg-slate-900/80 rounded-xl border border-slate-700/60 space-y-1.5 shadow-sm";
+          item.className = "p-3 bg-slate-900/80 rounded-xl border border-slate-700/60 space-y-2 shadow-sm transition hover:border-slate-500";
+          const pIdx = (nt.pIdx !== undefined && nt.pIdx !== null) ? nt.pIdx : 0;
+          const pLabel = (nt.pIdx !== undefined && nt.pIdx !== null) ? `${nt.pIdx + 1}. bekezdés` : 'Szövegrészlet';
+
           item.innerHTML = `
-            ${nt.quote ? `<div class="text-[11px] text-indigo-300 italic font-serif line-clamp-2 border-l-2 border-indigo-500 pl-2">"${nt.quote}"</div>` : ''}
+            <div class="flex items-center justify-between text-[10px] text-slate-400 border-b border-slate-800 pb-1 cursor-pointer hover:text-indigo-300" onclick="scrollToParagraph(${pIdx}, true, true); toggleDrawer();">
+              <span class="text-indigo-400 font-semibold flex items-center gap-1">
+                <span>📍</span> <span>${pLabel}</span>
+              </span>
+              <span class="text-slate-400 font-medium">Ugrás ide ↗</span>
+            </div>
+            ${nt.quote ? `<div onclick="scrollToParagraph(${pIdx}, true, true); toggleDrawer();" class="text-[11px] text-indigo-300/90 italic font-serif line-clamp-2 border-l-2 border-indigo-500 pl-2 cursor-pointer hover:text-indigo-200">"${nt.quote}"</div>` : ''}
             <div class="text-xs text-slate-100 font-medium whitespace-pre-wrap">${nt.text}</div>
-            <div class="flex justify-end pt-1">
-              <button onclick="deleteNote(${idx})" class="text-rose-400 hover:bg-rose-500/20 px-2 py-0.5 rounded text-[11px] font-semibold">🗑️ Törlés</button>
+            <div class="flex justify-end pt-1 border-t border-slate-800/80">
+              <button onclick="deleteNote(${idx})" class="text-rose-400 hover:bg-rose-500/20 px-2 py-0.5 rounded text-[11px] font-semibold flex items-center gap-1">
+                <span>🗑️</span> <span>Törlés</span>
+              </button>
             </div>
           `;
           content.appendChild(item);
