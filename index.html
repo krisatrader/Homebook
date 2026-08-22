@@ -201,20 +201,16 @@
       </div>
 
       <div id="lib-content-my" class="flex-1 overflow-y-auto space-y-3 pr-1">
-        <div class="p-3 bg-slate-900/90 border border-slate-700/80 rounded-2xl space-y-3">
+        <div class="p-3.5 bg-slate-900/90 border border-slate-700/80 rounded-2xl space-y-3">
           <div>
-            <label class="block text-[11px] font-bold text-indigo-300 uppercase tracking-wider mb-1">📂 Saját Mappa Neve iPhone-on:</label>
-            <div class="flex gap-2">
-              <input type="text" id="folder-name-input" value="Ebook" oninput="saveFolderNameInput(this.value)" placeholder="Ebook" class="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-200 font-semibold focus:outline-none focus:border-indigo-500">
-              <label class="py-1.5 px-3 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs rounded-xl flex items-center justify-center gap-1 cursor-pointer active:scale-95 transition shadow-md shadow-indigo-600/30 shrink-0">
-                <span>📥 Tallózás / Feltöltés</span>
-                <input type="file" id="file-input" accept=".epub,.kepub,.kepub.epub,.txt,.pdf" multiple class="hidden" onchange="handleFileUpload(event)">
-              </label>
-            </div>
+            <label class="w-full py-3 px-4 bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white font-bold text-xs sm:text-sm rounded-xl flex items-center justify-center gap-2 cursor-pointer active:scale-95 transition shadow-lg shadow-indigo-600/30">
+              <span>📥 Könyv Hozzáadása / Tallózás (.epub, .pdf, .txt)</span>
+              <input type="file" id="file-input" accept=".epub,.kepub,.kepub.epub,.txt,.pdf" multiple class="hidden" onchange="handleFileUpload(event)">
+            </label>
           </div>
 
           <div class="pt-2 border-t border-slate-800/80 flex items-center justify-between gap-2">
-            <span class="text-[10px] text-slate-400 font-semibold">Biztonsági mentés elmentése az iPhone-ra:</span>
+            <span class="text-[10px] text-slate-400 font-semibold">Biztonsági mentés:</span>
             <div class="flex gap-1.5">
               <button onclick="exportBackupToFile()" class="px-2.5 py-1 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 rounded-lg text-[11px] font-semibold transition flex items-center gap-1" title="Könyvek és haladás elmentése fájlba">
                 <span>💾 Mentés</span>
@@ -362,30 +358,47 @@
         </div>
       </div>
 
-      <div class="p-3 bg-slate-900 border border-slate-700/80 rounded-2xl space-y-3">
-        <label class="block text-[11px] font-bold text-indigo-300 uppercase tracking-wider">🎙️ Felolvasó Paraméterek</label>
+      <div class="p-4 bg-slate-900 border border-slate-700/80 rounded-2xl space-y-4">
+        <label class="block text-xs font-bold text-indigo-300 uppercase tracking-wider border-b border-slate-800 pb-2">🎙️ Hang & Felolvasó Beállítások</label>
         
-        <div class="space-y-1">
-          <div class="flex justify-between text-[11px] font-bold text-slate-400 uppercase">
-            <span>Beszédsebesség</span> <span id="lbl-tts-speed">1.0x</span>
-          </div>
-          <input type="range" min="0.5" max="2.0" step="0.05" value="1.0" id="slider-tts-speed" oninput="updateTTSSpeedParam(this.value)" class="w-full accent-indigo-500 bg-slate-700 h-1.5 rounded-lg appearance-none cursor-pointer">
+        <!-- Hangmotor választás -->
+        <div class="space-y-1.5">
+          <label class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Felolvasó Motor & Hang</label>
+          <select id="select-edge-voice" onchange="changeEdgeVoice(this.value)" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500">
+            <option value="gtts-hu">🌐 Google Translate TTS (gTTS Online - Tiszta magyar)</option>
+          </select>
+          <p class="text-[10px] text-slate-400">📱 Az iPhone saját magyar hangjai automatikusan hozzáadódnak a fenti listához.</p>
         </div>
 
-        <div class="space-y-1 pt-1">
-          <div class="flex justify-between text-[11px] font-bold text-slate-400 uppercase">
-            <span>Mondatok közötti szünet</span> <span id="lbl-tts-delay">0.0 mp</span>
+        <!-- Beszédsebesség -->
+        <div class="space-y-2 pt-1 border-t border-slate-800/80">
+          <div class="flex justify-between items-center text-[11px] font-bold text-slate-400 uppercase">
+            <span>Beszédsebesség</span>
+            <span id="lbl-tts-speed" class="text-xs text-indigo-400 font-mono font-bold bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">1.00x</span>
           </div>
-          <input type="range" min="0" max="3.0" step="0.2" value="0.0" id="slider-tts-delay" oninput="updateTTSDelayParam(this.value)" class="w-full accent-indigo-500 bg-slate-700 h-1.5 rounded-lg appearance-none cursor-pointer">
+          <input type="range" min="0.5" max="2.0" step="0.05" value="1.0" id="slider-tts-speed" oninput="updateTTSSpeedParam(this.value)" class="w-full accent-indigo-500 bg-slate-700 h-2 rounded-lg appearance-none cursor-pointer">
+          <div class="flex justify-between gap-1 text-[10px] font-semibold text-slate-300">
+            <button type="button" onclick="updateTTSSpeedParam(0.8)" class="flex-1 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition active:scale-95">0.8x</button>
+            <button type="button" onclick="updateTTSSpeedParam(1.0)" class="flex-1 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition active:scale-95 text-indigo-300">1.0x</button>
+            <button type="button" onclick="updateTTSSpeedParam(1.25)" class="flex-1 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition active:scale-95">1.25x</button>
+            <button type="button" onclick="updateTTSSpeedParam(1.5)" class="flex-1 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition active:scale-95">1.5x</button>
+          </div>
         </div>
-      </div>
 
-      <div class="space-y-1.5">
-        <label class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Felolvasó Motor Választás</label>
-        <select id="select-edge-voice" onchange="changeEdgeVoice(this.value)" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500">
-          <option value="gtts-hu">🌐 Google Translate TTS (gTTS Online)</option>
-        </select>
-        <p class="text-[10px] text-slate-400 mt-1">📱 Az iPhone saját magyar hangjai automatikusan hozzáadódnak a fenti listához.</p>
+        <!-- Mondatok közötti szünet / késleltetés -->
+        <div class="space-y-2 pt-1 border-t border-slate-800/80">
+          <div class="flex justify-between items-center text-[11px] font-bold text-slate-400 uppercase">
+            <span>Mondatok közötti szünet</span>
+            <span id="lbl-tts-delay" class="text-xs text-emerald-400 font-mono font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">0.0 mp</span>
+          </div>
+          <input type="range" min="0" max="3.0" step="0.2" value="0.0" id="slider-tts-delay" oninput="updateTTSDelayParam(this.value)" class="w-full accent-emerald-500 bg-slate-700 h-2 rounded-lg appearance-none cursor-pointer">
+          <div class="flex justify-between gap-1 text-[10px] font-semibold text-slate-300">
+            <button type="button" onclick="updateTTSDelayParam(0.0)" class="flex-1 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition active:scale-95 text-emerald-300">Folyamatos (0 mp)</button>
+            <button type="button" onclick="updateTTSDelayParam(0.5)" class="flex-1 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition active:scale-95">0.5 mp</button>
+            <button type="button" onclick="updateTTSDelayParam(1.0)" class="flex-1 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition active:scale-95">1.0 mp</button>
+            <button type="button" onclick="updateTTSDelayParam(2.0)" class="flex-1 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition active:scale-95">2.0 mp</button>
+          </div>
+        </div>
       </div>
 
     </div>
@@ -796,7 +809,7 @@
         if (file.name.endsWith('.txt')) {
           const text = await file.text();
           const pList = text.split(/\n+/).map(p => p.trim()).filter(p => p.length > 0);
-          await addBookToLibrary(title, myFolderName, pList, [{ title: "Teljes Könyv", startP: 0, endP: pList.length - 1 }]);
+          await addBookToLibrary(title, "Saját könyv", pList, [{ title: "Teljes Könyv", startP: 0, endP: pList.length - 1 }]);
         } 
         else if (file.name.endsWith('.epub') || file.name.endsWith('.kepub') || file.name.endsWith('.kepub.epub')) {
           try {
@@ -821,7 +834,7 @@
               }
             }
             
-            await addBookToLibrary(title, myFolderName, loadedParagraphs, chapters);
+            await addBookToLibrary(title, "Saját könyv", loadedParagraphs, chapters);
           } catch (err) {
             console.warn("EPUB hiba:", err);
           }
@@ -848,7 +861,7 @@
               }
             }
 
-            await addBookToLibrary(title, myFolderName, loadedParagraphs, chapters);
+            await addBookToLibrary(title, "Saját könyv", loadedParagraphs, chapters);
           } catch (err) {
             console.warn("PDF hiba:", err);
           }
@@ -1335,15 +1348,22 @@
 
     function updateTTSSpeedParam(val) {
       ttsRate = parseFloat(val);
-      document.getElementById('lbl-tts-speed').innerText = `${ttsRate.toFixed(2)}x`;
-      document.getElementById('btn-speed').innerText = `${ttsRate.toFixed(1)}x`;
+      const slider = document.getElementById('slider-tts-speed');
+      if (slider) slider.value = ttsRate;
+      const lbl = document.getElementById('lbl-tts-speed');
+      if (lbl) lbl.innerText = `${ttsRate.toFixed(2)}x`;
+      const btn = document.getElementById('btn-speed');
+      if (btn) btn.innerText = `${ttsRate.toFixed(1)}x`;
       localStorage.setItem('ebook_tts_rate', ttsRate);
       if (isSpeaking) speakSentence(true);
     }
 
     function updateTTSDelayParam(val) {
       sentenceDelay = parseFloat(val);
-      document.getElementById('lbl-tts-delay').innerText = `${sentenceDelay.toFixed(1)} mp`;
+      const slider = document.getElementById('slider-tts-delay');
+      if (slider) slider.value = sentenceDelay;
+      const lbl = document.getElementById('lbl-tts-delay');
+      if (lbl) lbl.innerText = `${sentenceDelay.toFixed(1)} mp`;
       localStorage.setItem('ebook_sentence_delay', sentenceDelay);
     }
 
