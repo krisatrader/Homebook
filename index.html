@@ -484,6 +484,19 @@
           </div>
         </div>
 
+        <!-- Azure Neural TTS Beállítások (Opcionális egyéni API kulcs) -->
+        <div class="pt-2 border-t border-slate-800/80 space-y-2">
+          <button type="button" onclick="toggleAzureSettings()" class="w-full flex items-center justify-between text-[11px] font-bold text-indigo-300 uppercase hover:text-indigo-200">
+            <span class="flex items-center gap-1.5"><span>☁️</span> Azure Neural TTS API (Opcionális)</span>
+            <span id="azure-chevron" class="text-xs">▼</span>
+          </button>
+          <div id="azure-settings-box" class="hidden space-y-2 pt-1">
+            <input type="text" id="input-azure-key" placeholder="Azure Speech API Kulcs" oninput="saveAzureConfig()" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono">
+            <input type="text" id="input-azure-region" placeholder="Régió (pl. westeurope vagy eastus)" oninput="saveAzureConfig()" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono">
+            <p class="text-[10px] text-slate-400">Saját Azure Cognitive Services kulccsal privát, 24kHz-es stúdió minőségű Microsoft Noémi és Tamás neurális beszédhangokat használhatsz.</p>
+          </div>
+        </div>
+
         <div class="pt-2 border-t border-slate-800/80 space-y-2">
           <div class="flex items-center justify-between bg-slate-900/60 p-3 rounded-xl border border-slate-700/50">
             <div>
@@ -923,12 +936,42 @@
         const select = document.getElementById('select-edge-voice');
         if (!select) return;
 
-        select.innerHTML = '<option value="gtts-hu">🌐 Google Translate TTS (gTTS Online - Tiszta magyar)</option>';
+        select.innerHTML = '';
 
+        // 1. MICROSOFT EDGE / AZURE NEURAL TTS CSOPORT
+        const edgeGroup = document.createElement('optgroup');
+        edgeGroup.label = `🌟 Microsoft Edge / Azure Neural TTS (Neurális)`;
+
+        const edgeVoices = [
+          { id: 'edge-hu-HU-NoemiNeural', name: '🌟 🇭🇺 Microsoft Noémi Neural (Női - Élethű Magyar)' },
+          { id: 'edge-hu-HU-TamasNeural', name: '🌟 🇭🇺 Microsoft Tamás Neural (Férfi - Élethű Magyar)' },
+          { id: 'edge-en-US-JennyNeural', name: '🌟 🇺🇸 Microsoft Jenny Neural (Angol Női)' },
+          { id: 'edge-en-US-GuyNeural', name: '🌟 🇺🇸 Microsoft Guy Neural (Angol Férfi)' },
+          { id: 'edge-de-DE-KatjaNeural', name: '🌟 🇩🇪 Microsoft Katja Neural (Német Női)' }
+        ];
+
+        edgeVoices.forEach(ev => {
+          const opt = document.createElement('option');
+          opt.value = ev.id;
+          opt.innerText = ev.name;
+          edgeGroup.appendChild(opt);
+        });
+        select.appendChild(edgeGroup);
+
+        // 2. GOOGLE TRANSLATE TTS CSOPORT
+        const gGroup = document.createElement('optgroup');
+        gGroup.label = `🌐 Online Google Translate TTS`;
+        const optGtts = document.createElement('option');
+        optGtts.value = 'gtts-hu';
+        optGtts.innerText = '🌐 Google Translate TTS (gTTS Online - Tiszta magyar)';
+        gGroup.appendChild(optGtts);
+        select.appendChild(gGroup);
+
+        // 3. MAGYAR RENDSZERHANGOK CSOPORT
         const huGroup = document.createElement('optgroup');
-        huGroup.label = `🇭🇺 Magyar Rendszerhangok`;
+        huGroup.label = `📱 Helyi Rendszerhangok (Offline)`;
 
-        // 1. Elsődleges továbbfejlesztett rendszerhang beállítás
+        // Elsődleges továbbfejlesztett rendszerhang beállítás
         const optSystem = document.createElement('option');
         optSystem.value = "system-hu";
         optSystem.innerText = "⭐ 🇭🇺 Rendszerhang: Tünde (Továbbfejlesztett / Rendszerbeállítás)";
@@ -1983,6 +2026,180 @@
       }
     }
 
+    function toggleAzureSettings() {
+      const box = document.getElementById('azure-settings-box');
+      const chev = document.getElementById('azure-chevron');
+      if (box) {
+        box.classList.toggle('hidden');
+        if (chev) chev.innerText = box.classList.contains('hidden') ? '▼' : '▲';
+      }
+    }
+
+    function saveAzureConfig() {
+      const key = document.getElementById('input-azure-key')?.value?.trim() || '';
+      const reg = document.getElementById('input-azure-region')?.value?.trim() || 'westeurope';
+      localStorage.setItem('ebook_azure_key', key);
+      localStorage.setItem('ebook_azure_region', reg);
+      logApp("AZURE_CONFIG_SAVED", `Azure konfiguráció elmentve (${reg})`);
+    }
+
+    function escapeXml(unsafe) {
+      return (unsafe || '').replace(/[<>&'"]/g, function (c) {
+        switch (c) {
+          case '<': return '&lt;';
+          case '>': return '&gt;';
+          case '&': return '&amp;';
+          case '\'': return '&apos;';
+          case '"': return '&quot;';
+        }
+      });
+    }
+
+    async function playAzureSpeechRestTTS(textToSay, voiceName, apiKey, region, onEndedCallback, sessionToken) {
+      try {
+        const rateDiff = Math.round((ttsRate - 1.0) * 100);
+        const rateStr = rateDiff >= 0 ? `+${rateDiff}%` : `${rateDiff}%`;
+        const ssml = `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='hu-HU'>` +
+          `<voice name='${voiceName}'>` +
+          `<prosody pitch='+0Hz' rate='${rateStr}' volume='+0%'>` +
+          `${escapeXml(textToSay)}` +
+          `</prosody></voice></speak>`;
+
+        const endpoint = `https://${region}.tts.speech.microsoft.com/cognitiveservices/v1`;
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Ocp-Apim-Subscription-Key': apiKey,
+            'Content-Type': 'application/ssml+xml',
+            'X-Microsoft-OutputFormat': 'audio-24khz-48kbitrate-mono-mp3',
+            'User-Agent': 'HomebookPro'
+          },
+          body: ssml
+        });
+
+        if (!response.ok) {
+          logApp("AZURE_HTTP_ERR", `Azure Speech API HTTP hiba: ${response.status} ${response.statusText}`);
+          return false;
+        }
+
+        const blob = await response.blob();
+        if (sessionToken !== currentTTSSessionToken || !isSpeaking) return true;
+
+        if (currentGTTSBlobUrl) {
+          URL.revokeObjectURL(currentGTTSBlobUrl);
+        }
+        currentGTTSBlobUrl = URL.createObjectURL(blob);
+
+        globalAudioPlayer.src = currentGTTSBlobUrl;
+        globalAudioPlayer.playbackRate = ttsRate;
+
+        let hasEnded = false;
+        const safeEnd = () => {
+          if (hasEnded || sessionToken !== currentTTSSessionToken) return;
+          hasEnded = true;
+          clearTimeout(playbackSafetyTimeout);
+          clearInterval(audioWatchdogInterval);
+          logApp("TTS_SUCCESS", `Sikeres Azure Neural felolvasás: ${voiceName}`);
+          if (typeof onEndedCallback === 'function') onEndedCallback();
+        };
+
+        globalAudioPlayer.onended = safeEnd;
+        globalAudioPlayer.ontimeupdate = () => {
+          if (sessionToken !== currentTTSSessionToken || hasEnded) return;
+          const dur = globalAudioPlayer.duration;
+          const curr = globalAudioPlayer.currentTime;
+          if (dur > 0 && isFinite(dur) && curr >= dur - 0.1) {
+            safeEnd();
+          }
+        };
+
+        globalAudioPlayer.onerror = () => {
+          logApp("AZURE_PLAY_ERR", "Azure audio blob lejátszási hiba");
+          safeEnd();
+        };
+
+        await globalAudioPlayer.play();
+        logApp("TTS_PLAYING", `Azure Neural Audio elindult: ${voiceName}`);
+        return true;
+      } catch (err) {
+        logApp("AZURE_FETCH_EXCEPTION", "Azure REST hiba", err);
+        return false;
+      }
+    }
+
+    async function playEdgeNeuralTTS(textToSay, voiceCode, onEndedCallback) {
+      const sessionToken = currentTTSSessionToken;
+      const voiceName = voiceCode.replace('edge-', '');
+
+      logApp("EDGE_TTS_REQ", `Microsoft Edge / Azure Neural TTS kérés #${sessionToken} (${voiceName})`, {
+        text: textToSay.substring(0, 40),
+        length: textToSay.length
+      });
+
+      // 1. Ha a böngésző natívan tartalmazza a Microsoft Natural / Online hangot (pl. Edge böngészőben)
+      const allVoices = synth.getVoices() || [];
+      const nativeEdgeVoice = allVoices.find(v => {
+        const n = (v.name || '').toLowerCase();
+        if (voiceName.includes('Noemi') && (n.includes('noemi') || n.includes('noémi'))) return true;
+        if (voiceName.includes('Tamas') && (n.includes('tamas') || n.includes('tamás'))) return true;
+        if (voiceName.includes('Jenny') && n.includes('jenny')) return true;
+        if (voiceName.includes('Guy') && n.includes('guy')) return true;
+        return false;
+      });
+
+      if (nativeEdgeVoice) {
+        logApp("EDGE_NATIVE_DIRECT", `Natív Microsoft Natural hang észlelve: ${nativeEdgeVoice.name}`);
+        playNativeUtteranceWithVoice(textToSay, nativeEdgeVoice, onEndedCallback, sessionToken);
+        return;
+      }
+
+      // 2. Ha van megadva saját Azure Speech API kulcs a Beállításokban
+      const azureKey = localStorage.getItem('ebook_azure_key');
+      const azureRegion = localStorage.getItem('ebook_azure_region') || 'westeurope';
+      if (azureKey && azureKey.trim().length > 0) {
+        const success = await playAzureSpeechRestTTS(textToSay, voiceName, azureKey.trim(), azureRegion.trim(), onEndedCallback, sessionToken);
+        if (success) return;
+      }
+
+      // 3. Fallback online szintézisre
+      logApp("EDGE_STREAM_TRY", `Neural beszédmotor indítása: ${voiceName}`);
+      playGTTS(textToSay, onEndedCallback);
+    }
+
+    function playNativeUtteranceWithVoice(textToSay, voiceObj, onEndedCallback, sessionToken) {
+      const utter = new SpeechSynthesisUtterance(textToSay);
+      utter.voice = voiceObj;
+      utter.lang = voiceObj.lang || 'hu-HU';
+      utter.rate = ttsRate;
+
+      window.activeUtterance = utter;
+
+      let hasEnded = false;
+      const safeEnd = () => {
+        if (hasEnded) return;
+        hasEnded = true;
+        clearTimeout(window.speechWatchdog);
+        logApp("EDGE_NATIVE_DONE", `Microsoft Natural hang befejezve: ${voiceObj.name}`);
+        if (typeof onEndedCallback === 'function') onEndedCallback();
+      };
+
+      utter.onend = safeEnd;
+      utter.onerror = (e) => {
+        logApp("EDGE_NATIVE_ERROR", `Microsoft Natural hiba: ${voiceObj.name}`, e);
+        safeEnd();
+      };
+
+      const estDuration = Math.max(3500, (textToSay.length / (8 * ttsRate)) * 1000 + 3500);
+      window.speechWatchdog = setTimeout(() => {
+        safeEnd();
+      }, estDuration);
+
+      if (synth.paused) {
+        synth.resume();
+      }
+      synth.speak(utter);
+    }
+
     async function speakSentence(isJump = false) {
       if (!isSpeaking || currentSentenceIdx >= ttsSentences.length) {
         pauseTTS();
@@ -2023,7 +2240,15 @@
         }
       };
 
-      // 1. GOOGLE TRANSLATE GTTS
+      // 1. MICROSOFT EDGE / AZURE NEURAL TTS MOTOR
+      if (selectedEdgeVoice.startsWith('edge-')) {
+        const statElem = document.getElementById('tts-status');
+        if (statElem) statElem.innerText = `🌟 Edge Neural: ${currentSentenceIdx + 1}/${ttsSentences.length}`;
+        playEdgeNeuralTTS(item.text, selectedEdgeVoice, proceedToNext);
+        return;
+      }
+
+      // 2. GOOGLE TRANSLATE GTTS
       if (selectedEdgeVoice === 'gtts-hu') {
         const statElem = document.getElementById('tts-status');
         if (statElem) statElem.innerText = `🌐 Google gTTS: ${currentSentenceIdx + 1}/${ttsSentences.length}`;
@@ -2031,7 +2256,7 @@
         return;
       }
 
-      // 2. ELÉRHETŐ ESZKÖZ / RENDSZER NATÍV TTS HANGOK
+      // 3. ELÉRHETŐ ESZKÖZ / RENDSZER NATÍV TTS HANGOK
       const isSystemHungarian = (selectedEdgeVoice === 'system-hu' || selectedEdgeVoice.toLowerCase().includes('tunde') || selectedEdgeVoice.toLowerCase().includes('tünde'));
       const voiceObj = isSystemHungarian ? null : getSelectedNativeVoiceObj();
       const voiceName = isSystemHungarian ? "Tünde (Továbbfejlesztett rendszerhang)" : (voiceObj ? `${voiceObj.name} (${voiceObj.lang})` : "Rendszerhang");
@@ -2521,6 +2746,14 @@
 
       document.getElementById('slider-tts-delay').value = sentenceDelay;
       document.getElementById('lbl-tts-delay').innerText = `${sentenceDelay.toFixed(1)} mp`;
+
+      // Azure Beállítások betöltése
+      const azKey = localStorage.getItem('ebook_azure_key') || '';
+      const azReg = localStorage.getItem('ebook_azure_region') || 'westeurope';
+      const inputKey = document.getElementById('input-azure-key');
+      const inputReg = document.getElementById('input-azure-region');
+      if (inputKey) inputKey.value = azKey;
+      if (inputReg) inputReg.value = azReg;
 
       // Naplózás kapcsolók szinkronizálása
       const chk1 = document.getElementById('chk-logging-toggle');
