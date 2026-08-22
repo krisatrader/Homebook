@@ -1,4 +1,4 @@
-const CACHE_NAME = 'homebook-cache-v1';
+const CACHE_NAME = 'homebook-cache-v2';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -30,14 +30,28 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
+// Network-first stratégia: Mindig a legfrissebb GitHub Pages verziót kéri le online állapotban, és offline esetén használja a cache-t
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
+
+  // Külső audio API hívások átengedése normálisan
+  if (event.request.url.includes('translate.google.com') || event.request.url.includes('api.mymemory')) {
+    return;
+  }
+
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      if (cached) return cached;
-      return fetch(event.request).catch(() => {
-        return cached;
-      });
-    })
+    fetch(event.request)
+      .then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200 && event.request.url.startsWith(self.location.origin)) {
+          const responseClone = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseClone);
+          });
+        }
+        return networkResponse;
+      })
+      .catch(() => {
+        return caches.match(event.request);
+      })
   );
 });
