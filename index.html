@@ -107,6 +107,9 @@
       <button onclick="toggleSettingsModal()" class="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-slate-700/50 text-slate-300 hover:text-white flex items-center justify-center text-sm active:scale-95 transition" title="Beállítások">
         ⚙️
       </button>
+      <button onclick="toggleDiagnosticsModal()" class="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-slate-700/50 text-slate-300 hover:text-white flex items-center justify-center text-sm active:scale-95 transition" title="Rendszernapló & Diagnosztika (Logok)">
+        📋
+      </button>
     </div>
   </header>
 
@@ -325,6 +328,37 @@
     </div>
   </div>
 
+  <div id="diagnostics-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 opacity-0 pointer-events-none transition-opacity duration-300 flex items-center justify-center p-4">
+    <div class="bg-slate-800 border border-slate-700 w-full max-w-lg rounded-2xl p-5 flex flex-col gap-3 shadow-2xl max-h-[88vh]">
+      <div class="flex items-center justify-between border-b border-slate-700 pb-2.5">
+        <h3 class="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
+          <span>📋</span> Rendszernapló & Diagnosztika
+        </h3>
+        <button onclick="toggleDiagnosticsModal()" class="text-slate-400 hover:text-white text-lg">✕</button>
+      </div>
+
+      <div class="space-y-1.5 flex-1 flex flex-col min-h-0">
+        <div class="flex items-center justify-between text-[11px] text-slate-400">
+          <span>Valós idejű működési és hibalogok:</span>
+          <span id="diag-log-count" class="text-indigo-400 font-mono text-[10px]">0 esemény</span>
+        </div>
+        <textarea id="diagnostics-textarea" readonly class="w-full h-64 bg-slate-950 border border-slate-700/80 rounded-xl p-3 font-mono text-[11px] text-emerald-400/90 leading-tight focus:outline-none focus:border-indigo-500 overflow-y-auto select-all resize-none"></textarea>
+      </div>
+
+      <div class="flex items-center justify-between gap-2 pt-2 border-t border-slate-700">
+        <button onclick="copyLogsToClipboard()" class="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition active:scale-95 shadow-lg shadow-indigo-600/30">
+          <span>📋</span> Log Másolása a Vágólapra
+        </button>
+        <button onclick="refreshDiagnosticsModal()" class="px-3 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-xl text-xs font-semibold">
+          🔄 Frissítés
+        </button>
+        <button onclick="clearAppLogs()" class="px-3 py-2.5 bg-rose-900/30 hover:bg-rose-900/50 text-rose-300 border border-rose-800/50 rounded-xl text-xs font-semibold">
+          🗑️
+        </button>
+      </div>
+    </div>
+  </div>
+
   <div id="settings-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 opacity-0 pointer-events-none transition-opacity duration-300 flex items-end sm:items-center justify-center p-0 sm:p-4">
     <div class="bg-slate-800 border-t sm:border border-slate-700 w-full max-w-md rounded-t-3xl sm:rounded-2xl p-6 space-y-5 transform translate-y-full sm:translate-y-0 transition-transform duration-300 shadow-2xl max-h-[90vh] overflow-y-auto" id="settings-sheet">
       
@@ -427,6 +461,12 @@
             <button type="button" onclick="updateTTSDelayParam(2.0)" class="flex-1 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition active:scale-95">2.0 mp</button>
           </div>
         </div>
+
+        <div class="pt-2 border-t border-slate-800/80">
+          <button type="button" onclick="toggleSettingsModal(); toggleDiagnosticsModal();" class="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition active:scale-95">
+            <span>📋</span> Rendszernapló & Hibakeresés (Logok)
+          </button>
+        </div>
       </div>
 
     </div>
@@ -439,6 +479,112 @@
     // ELKERÜLHETETLEN iOS GC VÉDELEM: Globális hivatkozások a böngészős leállások kivédésére
     window.activeUtterance = null;
     window.speechWatchdog = null;
+
+    // ==========================================
+    // 📋 RENDSZERNAPLÓ ÉS DIAGNOSZTIKA LOGOLÓ
+    // ==========================================
+    window.appLogs = [];
+
+    function logApp(type, message, details = null) {
+      const now = new Date();
+      const time = now.toTimeString().split(' ')[0] + '.' + String(now.getMilliseconds()).padStart(3, '0');
+      let detailStr = '';
+      if (details !== null && details !== undefined) {
+        if (typeof details === 'object') {
+          try {
+            detailStr = JSON.stringify(details);
+          } catch(e) {
+            detailStr = String(details);
+          }
+        } else {
+          detailStr = String(details);
+        }
+      }
+      const entry = { time, type, message, details: detailStr };
+      window.appLogs.push(entry);
+      if (window.appLogs.length > 300) window.appLogs.shift();
+      console.log(`[${time}] [${type}] ${message}`, detailStr ? `-> ${detailStr}` : '');
+      
+      const modal = document.getElementById('diagnostics-modal');
+      if (modal && !modal.classList.contains('opacity-0')) {
+        renderDiagnosticsView();
+      }
+    }
+
+    function renderDiagnosticsView() {
+      const ta = document.getElementById('diagnostics-textarea');
+      const count = document.getElementById('diag-log-count');
+      if (ta) ta.value = getFormattedLogs();
+      if (count) count.innerText = `${window.appLogs.length} esemény`;
+    }
+
+    function getFormattedLogs() {
+      const ua = navigator.userAgent;
+      const online = navigator.onLine ? 'Online (Csatlakoztatva)' : 'Offline (Nincs kapcsolat)';
+      let out = `========================================\n` +
+                ` HOMEBOOK PRO - RENDSZERNAPLÓ (LOGS)\n` +
+                ` Időbélyeg: ${new Date().toISOString()}\n` +
+                ` Hálózati státusz: ${online}\n` +
+                ` Aktív hang: ${selectedEdgeVoice}\n` +
+                ` Sebesség: ${ttsRate}x | Szünet: ${sentenceDelay}s\n` +
+                ` Böngésző / OS: ${ua}\n` +
+                ` Könyv: ${book?.title || 'Nincs betöltve'} (${ttsSentences?.length || 0} mondat)\n` +
+                `========================================\n\n`;
+      window.appLogs.forEach(l => {
+        out += `[${l.time}] [${l.type}] ${l.message}${l.details ? ' -> ' + l.details : ''}\n`;
+      });
+      return out;
+    }
+
+    function toggleDiagnosticsModal() {
+      const modal = document.getElementById('diagnostics-modal');
+      if (!modal) return;
+      if (modal.classList.contains('opacity-0')) {
+        modal.classList.remove('opacity-0', 'pointer-events-none');
+        renderDiagnosticsView();
+      } else {
+        modal.classList.add('opacity-0', 'pointer-events-none');
+      }
+    }
+
+    function refreshDiagnosticsModal() {
+      renderDiagnosticsView();
+      showToast("Logok frissítve.");
+    }
+
+    function clearAppLogs() {
+      window.appLogs = [];
+      renderDiagnosticsView();
+      showToast("Napló kiürítve.");
+    }
+
+    function copyLogsToClipboard() {
+      const text = getFormattedLogs();
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => {
+          showToast("📋 Logok kimásolva a vágólapra!");
+        }).catch(() => {
+          fallbackClipboardCopy(text);
+        });
+      } else {
+        fallbackClipboardCopy(text);
+      }
+    }
+
+    function fallbackClipboardCopy(text) {
+      const ta = document.getElementById('diagnostics-textarea');
+      if (ta) {
+        ta.value = text;
+        ta.focus();
+        ta.select();
+        try {
+          document.execCommand('copy');
+          showToast("📋 Logok kimásolva!");
+        } catch(e) {
+          showToast("Jelöld ki a szöveget és másold ki kézzel!");
+        }
+      }
+    }
 
     function openLocalDB() {
       return new Promise((resolve, reject) => {
@@ -602,6 +748,14 @@
 
       const activeId = localStorage.getItem('ebook_active_book_id') || myLibrary[0].id;
       loadBookFromLibrary(myLibrary.some(b => b.id === activeId) ? activeId : myLibrary[0].id);
+
+      logApp("APP_INIT", "Homebook Pro sikeresen inicializálva", {
+        tema: currentTheme,
+        hang: selectedEdgeVoice,
+        sebesseg: ttsRate,
+        szunet: sentenceDelay,
+        online: navigator.onLine
+      });
     });
 
     // KILISTÁZZA ÉS CSOPORTOSÍTJA AZ ÖSSZES ELÉRHETŐ TTS HANGOT (MAGYAR + ÖSSZES EGYÉB NYELV)
@@ -628,6 +782,10 @@
         otherVoices.sort((a, b) => (a.lang || '').localeCompare(b.lang || '') || a.name.localeCompare(b.name));
 
         nativeVoicesList = [...huVoices, ...otherVoices];
+        logApp("VOICES_READY", `Rendszer TTS hangok beolvasva: ${voices.length} db (Magyar: ${huVoices.length} db)`, {
+          magyarok: huVoices.map(v => `${v.name} (${v.lang})`)
+        });
+
         const select = document.getElementById('select-edge-voice');
         if (!select) return;
 
@@ -1603,6 +1761,7 @@
       // 2. ELÉRHETŐ ESZKÖZ / RENDSZER NATÍV TTS HANGOK
       const voiceObj = getSelectedNativeVoiceObj();
       const voiceName = voiceObj ? `${voiceObj.name} (${voiceObj.lang})` : "Rendszerhang";
+      logApp("TTS_NATIVE_START", `Natív hang felolvasás: ${voiceName}`, { text: item.text.substring(0, 40) });
       document.getElementById('tts-status').innerText = `📱 ${voiceName}: ${currentSentenceIdx + 1}/${ttsSentences.length}`;
 
       setTimeout(() => {
@@ -1623,78 +1782,95 @@
         const safeEnd = () => {
           if (hasEnded) return;
           hasEnded = true;
+          logApp("TTS_NATIVE_DONE", `Natív mondat befejezve: ${voiceName}`);
           proceedToNext();
         };
 
-          utter.onend = safeEnd;
-          utter.onerror = (e) => {
-            console.warn("Natív TTS hiba:", e);
-            if (e.error === 'canceled' || e.error === 'interrupted') return;
-            showToast("Beszédszintetizátor hiba történt.");
-            pauseTTS();
-          };
+        utter.onend = safeEnd;
+        utter.onerror = (e) => {
+          logApp("TTS_NATIVE_ERROR", `Natív TTS hiba: ${voiceName}`, { error: e.error, message: e.message });
+          if (e.error === 'canceled' || e.error === 'interrupted') return;
+          showToast(`Natív szintetizátor hiba: ${e.error || 'Ismeretlen'} (Lásd 📋 Log)`);
+          pauseTTS();
+        };
 
-          const estDuration = Math.max(4000, (item.text.length / (8 * ttsRate)) * 1000 + 4000);
-          window.speechWatchdog = setTimeout(() => {
-            console.warn("Watchdog léptetés...");
-            safeEnd();
-          }, estDuration);
+        const estDuration = Math.max(4000, (item.text.length / (8 * ttsRate)) * 1000 + 4000);
+        window.speechWatchdog = setTimeout(() => {
+          logApp("TTS_WATCHDOG", "Watchdog léptetés natív hangnál...");
+          safeEnd();
+        }, estDuration);
 
-          if (synth.paused) {
-            synth.resume();
-          }
+        if (synth.paused) {
+          synth.resume();
+        }
 
-          synth.speak(utter);
+        synth.speak(utter);
       }, 40);
     }
 
     async function playGTTS(textToSay, onEndedCallback) {
       stopAudioPlayback();
 
+      logApp("TTS_REQ", "gTTS kérés összeállítása", { text: textToSay.substring(0, 40), length: textToSay.length });
+
       const encodedText = encodeURIComponent(textToSay);
-      const url = `https://translate.googleapis.com/translate_tts?client=gtx&ie=UTF-8&tl=hu&q=${encodedText}`;
+      const sources = [
+        { name: "Google API (gtx)", url: `https://translate.googleapis.com/translate_tts?client=gtx&ie=UTF-8&tl=hu&q=${encodedText}` },
+        { name: "Google Translate (tw-ob)", url: `https://translate.google.com/translate_tts?ie=UTF-8&tl=hu&client=tw-ob&q=${encodedText}` },
+        { name: "YouDao Mirror", url: `https://dict.youdao.com/dictvoice?audio=${encodedText}&le=hu` }
+      ];
 
-      let hasEnded = false;
-      const safeEnd = () => {
-        if (hasEnded) return;
-        hasEnded = true;
-        clearTimeout(playbackSafetyTimeout);
-        if (currentGTTSBlobUrl) {
-          URL.revokeObjectURL(currentGTTSBlobUrl);
-          currentGTTSBlobUrl = null;
+      const trySource = (idx) => {
+        if (!isSpeaking) {
+          logApp("TTS_ABORT", "Lejátszás megszakítva (isSpeaking=false)");
+          return;
         }
-        if (typeof onEndedCallback === 'function') onEndedCallback();
-      };
 
-      try {
-        const response = await fetch(url, { referrerPolicy: 'no-referrer' });
-        if (!response.ok) {
-          throw new Error(`HTTP hiba: ${response.status}`);
+        if (idx >= sources.length) {
+          logApp("TTS_FAIL_ALL", "Minden online TTS forrás sikertelen volt.");
+          showToast("❌ Google TTS hiba! Nyisd meg a 📋 Rendszernaplót vagy válts natív magyar hangra.");
+          pauseTTS();
+          return;
         }
-        const blob = await response.blob();
-        currentGTTSBlobUrl = URL.createObjectURL(blob);
 
-        globalAudioPlayer.src = currentGTTSBlobUrl;
+        const source = sources[idx];
+        logApp("TTS_ATTEMPT", `Lejátszási kísérlet (${idx + 1}/${sources.length}): ${source.name}`, { url: source.url });
+
+        globalAudioPlayer.src = source.url;
         globalAudioPlayer.playbackRate = ttsRate;
+
+        let hasEnded = false;
+        const safeEnd = () => {
+          if (hasEnded) return;
+          hasEnded = true;
+          clearTimeout(playbackSafetyTimeout);
+          logApp("TTS_SUCCESS", `Sikeres felolvasás: ${source.name}`);
+          if (typeof onEndedCallback === 'function') onEndedCallback();
+        };
+
         globalAudioPlayer.onended = safeEnd;
         globalAudioPlayer.onerror = (e) => {
-          console.warn("gTTS lejátszási hiba:", e);
-          showToast("Hálózati hiba a felolvasás során.");
-          pauseTTS();
+          const mediaErr = globalAudioPlayer.error;
+          const errInfo = mediaErr ? { code: mediaErr.code, message: mediaErr.message } : { info: "Hálózati/Dekódolási hiba" };
+          logApp("TTS_ERROR", `${source.name} sikertelen`, errInfo);
+          trySource(idx + 1);
         };
 
         const estDuration = Math.max(5000, (textToSay.length / (8 * ttsRate)) * 1000 + 4000);
         playbackSafetyTimeout = setTimeout(() => {
-          console.warn("gTTS biztonsági léptetés...");
+          logApp("TTS_TIMEOUT", `${source.name} időtúllépés, továbblépés`);
           safeEnd();
         }, estDuration);
 
-        await globalAudioPlayer.play();
-      } catch (err) {
-        console.warn("gTTS letöltési hiba:", err);
-        showToast("Hálózati hiba a Google TTS elérésekor.");
-        pauseTTS();
-      }
+        globalAudioPlayer.play().then(() => {
+          logApp("TTS_PLAYING", `Audio lejátszás elindult: ${source.name}`);
+        }).catch(err => {
+          logApp("TTS_PLAY_REJECTED", `${source.name} play() elutasítva`, { name: err.name, message: err.message });
+          trySource(idx + 1);
+        });
+      };
+
+      trySource(0);
     }
 
     function highlightTTSSentence(item) {
