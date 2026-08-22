@@ -394,7 +394,7 @@
           <select id="select-edge-voice" onchange="changeEdgeVoice(this.value)" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500">
             <option value="gtts-hu">🌐 Google Translate TTS (gTTS Online - Tiszta magyar)</option>
           </select>
-          <p class="text-[10px] text-slate-400">📱 Az iPhone saját magyar hangjai automatikusan hozzáadódnak a fenti listához.</p>
+          <p class="text-[10px] text-slate-400">📱 Az összes elérhető magyar és rendszer TTS beszédhang listázva van.</p>
         </div>
 
         <!-- Beszédsebesség -->
@@ -601,12 +601,17 @@
       loadBookFromLibrary(myLibrary.some(b => b.id === activeId) ? activeId : myLibrary[0].id);
     });
 
-    // ÉSZREVÉTLENÜL KILISTÁZZA ÉS RANGSOROLJA AZ IPHONE LEGJOBB MAGYAR HANGJAIT
+    // KILISTÁZZA ÉS CSOPORTOSÍTJA AZ ÖSSZES ELÉRHETŐ TTS HANGOT (MAGYAR + ÖSSZES EGYÉB NYELV)
     function populateNativeVoices() {
       const updateVoiceDropdown = () => {
-        const voices = synth.getVoices();
+        const voices = synth.getVoices() || [];
+        if (voices.length === 0) return;
+
+        // Magyar és egyéb nyelvi hangok szétválasztása
         const huVoices = voices.filter(v => v.lang && v.lang.toLowerCase().includes('hu'));
-        
+        const otherVoices = voices.filter(v => !v.lang || !v.lang.toLowerCase().includes('hu'));
+
+        // Magyar hangok rangsorolása minőség szerint (Siri, Premium, Enhanced előre)
         huVoices.sort((a, b) => {
           const score = (v) => 
             (v.name.includes('Premium') ? 5 : 0) + 
@@ -616,22 +621,40 @@
           return score(b) - score(a);
         });
 
-        nativeVoicesList = huVoices;
+        // Többi hang rendezése nyelv és név szerint
+        otherVoices.sort((a, b) => (a.lang || '').localeCompare(b.lang || '') || a.name.localeCompare(b.name));
+
+        nativeVoicesList = [...huVoices, ...otherVoices];
         const select = document.getElementById('select-edge-voice');
         if (!select) return;
 
-        while (select.options.length > 1) {
-          select.remove(1);
+        select.innerHTML = '<option value="gtts-hu">🌐 Google Translate TTS (gTTS Online - Tiszta magyar)</option>';
+
+        if (huVoices.length > 0) {
+          const huGroup = document.createElement('optgroup');
+          huGroup.label = `🇭🇺 Magyar Rendszerhangok (${huVoices.length} db)`;
+          huVoices.forEach((v) => {
+            const opt = document.createElement('option');
+            opt.value = `voice-${v.name}-${v.lang}`;
+            opt.innerText = `🇭🇺 ${v.name} (${v.lang})`;
+            huGroup.appendChild(opt);
+          });
+          select.appendChild(huGroup);
         }
 
-        huVoices.forEach((v, idx) => {
-          const opt = document.createElement('option');
-          opt.value = `native-${idx}`;
-          opt.innerText = `📱 iPhone: ${v.name} (${v.lang})`;
-          select.appendChild(opt);
-        });
+        if (otherVoices.length > 0) {
+          const otherGroup = document.createElement('optgroup');
+          otherGroup.label = `🌍 Összes elérhető TTS hang (${otherVoices.length} db)`;
+          otherVoices.forEach((v) => {
+            const opt = document.createElement('option');
+            opt.value = `voice-${v.name}-${v.lang}`;
+            opt.innerText = `🗣️ ${v.name} (${v.lang})`;
+            otherGroup.appendChild(opt);
+          });
+          select.appendChild(otherGroup);
+        }
 
-        if (selectedEdgeVoice.startsWith('native-')) {
+        if (selectedEdgeVoice) {
           select.value = selectedEdgeVoice;
         }
       };
@@ -643,11 +666,20 @@
     }
 
     function getSelectedNativeVoiceObj() {
+      if (selectedEdgeVoice === 'gtts-hu') return null;
+
+      if (selectedEdgeVoice.startsWith('voice-')) {
+        const key = selectedEdgeVoice.replace('voice-', '');
+        const found = nativeVoicesList.find(v => `${v.name}-${v.lang}` === key);
+        if (found) return found;
+      }
+
       if (selectedEdgeVoice.startsWith('native-')) {
         const idx = parseInt(selectedEdgeVoice.replace('native-', ''));
         return nativeVoicesList[idx] || nativeVoicesList[0];
       }
-      return nativeVoicesList[0] || null;
+
+      return nativeVoicesList.find(v => v.lang && v.lang.toLowerCase().includes('hu')) || nativeVoicesList[0] || null;
     }
 
     function showToast(msg) {
@@ -1554,30 +1586,31 @@
         return;
       }
 
-      // 2. KIZÁRÓLAG IPHONE NATÍV PRÉMIUM HANGOK (Garantáltan nem ugrik át mondatot)
-      if (selectedEdgeVoice.startsWith('native-') || selectedEdgeVoice === 'native') {
-        const voiceObj = getSelectedNativeVoiceObj();
-        const voiceName = voiceObj ? voiceObj.name : "Magyar Hang";
-        document.getElementById('tts-status').innerText = `📱 Natív Hang (${voiceName}): ${currentSentenceIdx + 1}/${ttsSentences.length}`;
+      // 2. ELÉRHETŐ ESZKÖZ / RENDSZER NATÍV TTS HANGOK
+      const voiceObj = getSelectedNativeVoiceObj();
+      const voiceName = voiceObj ? `${voiceObj.name} (${voiceObj.lang})` : "Rendszerhang";
+      document.getElementById('tts-status').innerText = `📱 ${voiceName}: ${currentSentenceIdx + 1}/${ttsSentences.length}`;
 
-        setTimeout(() => {
-          if (!isSpeaking) return;
+      setTimeout(() => {
+        if (!isSpeaking) return;
 
-          const utter = new SpeechSynthesisUtterance(item.text);
+        const utter = new SpeechSynthesisUtterance(item.text);
+        if (voiceObj) {
+          utter.voice = voiceObj;
+          utter.lang = voiceObj.lang || 'hu-HU';
+        } else {
           utter.lang = 'hu-HU';
-          if (voiceObj) {
-            utter.voice = voiceObj;
-          }
-          utter.rate = ttsRate;
+        }
+        utter.rate = ttsRate;
 
-          window.activeUtterance = utter;
+        window.activeUtterance = utter;
 
-          let hasEnded = false;
-          const safeEnd = () => {
-            if (hasEnded) return;
-            hasEnded = true;
-            proceedToNext();
-          };
+        let hasEnded = false;
+        const safeEnd = () => {
+          if (hasEnded) return;
+          hasEnded = true;
+          proceedToNext();
+        };
 
           utter.onend = safeEnd;
           utter.onerror = (e) => {
@@ -1598,10 +1631,7 @@
           }
 
           synth.speak(utter);
-        }, 40);
-
-        return;
-      }
+      }, 40);
     }
 
     function playGTTS(textToSay, onEndedCallback) {
