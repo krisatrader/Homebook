@@ -486,6 +486,22 @@
           </div>
         </div>
 
+        <!-- Előretöltési Puffer (Mondatok száma) -->
+        <div class="space-y-2 pt-1 border-t border-slate-800/80">
+          <div class="flex justify-between items-center text-[11px] font-bold text-slate-400 uppercase">
+            <span class="flex items-center gap-1"><span>⚡</span> Előretöltési puffer (Akadozásmentesítés)</span>
+            <span id="lbl-tts-buffer" class="text-xs text-amber-400 font-mono font-bold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">3 mondat</span>
+          </div>
+          <input type="range" min="1" max="8" step="1" value="3" id="slider-tts-buffer" oninput="updateTTSBufferParam(this.value)" class="w-full accent-amber-500 bg-slate-700 h-2 rounded-lg appearance-none cursor-pointer">
+          <div class="flex justify-between gap-1 text-[10px] font-semibold text-slate-300">
+            <button type="button" onclick="updateTTSBufferParam(1)" class="flex-1 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition active:scale-95">1 mondat</button>
+            <button type="button" onclick="updateTTSBufferParam(3)" class="flex-1 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition active:scale-95 text-amber-300">3 mondat</button>
+            <button type="button" onclick="updateTTSBufferParam(5)" class="flex-1 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition active:scale-95">5 mondat</button>
+            <button type="button" onclick="updateTTSBufferParam(8)" class="flex-1 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition active:scale-95">8 mondat</button>
+          </div>
+          <p class="text-[10px] text-slate-400">A kiválasztott számú következő mondat a háttérben előre legenerálódik a memóriába, így a felolvasás 0ms késleltetéssel, akadozás nélkül szól.</p>
+        </div>
+
         <!-- Azure Neural TTS Beállítások (Opcionális egyéni API kulcs) -->
         <div class="pt-2 border-t border-slate-800/80 space-y-2">
           <button type="button" onclick="toggleAzureSettings()" class="w-full flex items-center justify-between text-[11px] font-bold text-indigo-300 uppercase hover:text-indigo-200">
@@ -929,6 +945,8 @@
     }
     let selectedEdgeVoice = storedVoice;
     let sentenceDelay = parseFloat(localStorage.getItem('ebook_sentence_delay') || '0.0');
+    let ttsBufferSize = parseInt(localStorage.getItem('ebook_buffer_size') || '3', 10);
+    let inFlightPrefetches = new Set();
 
     let synth = window.speechSynthesis;
     let nativeVoicesList = [];
@@ -2088,6 +2106,19 @@
       logApp("TTS_PARAM_DELAY", `Mondatközi szünet beállítva: ${sentenceDelay.toFixed(1)}s`);
     }
 
+    function updateTTSBufferParam(val) {
+      ttsBufferSize = parseInt(val, 10);
+      const slider = document.getElementById('slider-tts-buffer');
+      if (slider) slider.value = ttsBufferSize;
+      const lbl = document.getElementById('lbl-tts-buffer');
+      if (lbl) lbl.innerText = `${ttsBufferSize} mondat`;
+      localStorage.setItem('ebook_buffer_size', ttsBufferSize);
+      logApp("TTS_PARAM_BUFFER", `Előretöltési puffer beállítva: ${ttsBufferSize} mondat`);
+      if (isSpeaking) {
+        triggerLookaheadBuffer(currentSentenceIdx, selectedEdgeVoice);
+      }
+    }
+
     function changeTTSSpeedShortcut() {
       if (ttsRate === 1.0) ttsRate = 1.25;
       else if (ttsRate === 1.25) ttsRate = 1.5;
@@ -2465,6 +2496,109 @@
       synth.speak(utter);
     }
 
+    async function triggerLookaheadBuffer(startIdx, voiceCode) {
+      if (!isSpeaking || !ttsSentences || ttsSentences.length === 0) return;
+      if (!voiceCode.startsWith('piper-') && !voiceCode.startsWith('edge-')) return;
+
+      const maxLookahead = Math.min(ttsSentences.length, startIdx + ttsBufferSize + 1);
+
+      for (let i = startIdx + 1; i < maxLookahead; i++) {
+        if (i >= ttsSentences.length) break;
+        const sentenceItem = ttsSentences[i];
+        if (!sentenceItem || !sentenceItem.text) continue;
+
+        const textToPreload = sentenceItem.text;
+        const cacheKey = getAudioCacheKey(textToPreload, voiceCode);
+
+        // Ha már folyamatban van a letöltése, ugorjuk át
+        if (inFlightPrefetches.has(cacheKey)) continue;
+
+        // Ellenőrizzük, hogy benne van-e már a gyorsítótárban
+        const cachedBlob = await dbGetAudioCache(cacheKey);
+        if (cachedBlob && cachedBlob.size > 100) continue;
+
+        // Háttérbeli lekérés indítása a pufferbe
+        inFlightPrefetches.add(cacheKey);
+        fetchAndCacheSentenceAudio(textToPreload, voiceCode, cacheKey).finally(() => {
+          inFlightPrefetches.delete(cacheKey);
+        });
+      }
+    }
+
+    async function fetchAndCacheSentenceAudio(textToSay, voiceCode, cacheKey) {
+      try {
+        if (voiceCode.startsWith('piper-')) {
+          const voiceName = voiceCode.replace('piper-', '');
+          let defaultBaseUrl = 'http://localhost:5000';
+          if (window.location.hostname.includes('onrender.com') || window.location.port === '5000') {
+            defaultBaseUrl = window.location.origin;
+          }
+          const baseUrl = (localStorage.getItem('ebook_piper_url') || defaultBaseUrl).replace(/\/+$/, '');
+
+          let response = null;
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+          try {
+            response = await fetch(`${baseUrl}/v1/audio/speech`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ model: voiceName, voice: voiceName, input: textToSay, speed: ttsRate }),
+              signal: controller.signal
+            });
+          } catch(e1) {
+            response = await fetch(`${baseUrl}/api/tts?text=${encodeURIComponent(textToSay)}&voice=${encodeURIComponent(voiceName)}`, {
+              method: 'GET',
+              signal: controller.signal
+            });
+          }
+          clearTimeout(timeoutId);
+
+          if (response && response.ok) {
+            const blob = await response.blob();
+            if (blob && blob.size > 100) {
+              await dbPutAudioCache(cacheKey, blob, textToSay);
+              logApp("BUFFER_PREFETCH_OK", `⚡ Puffer előretöltve (${blob.size} bájt) [${voiceName}]`, { text: textToSay.substring(0, 35) });
+            }
+          }
+        } else if (voiceCode.startsWith('edge-')) {
+          const voiceName = voiceCode.replace('edge-', '');
+          const azureKey = localStorage.getItem('ebook_azure_key');
+          const azureRegion = localStorage.getItem('ebook_azure_region') || 'westeurope';
+          if (azureKey && azureKey.trim().length > 0) {
+            const rateDiff = Math.round((ttsRate - 1.0) * 100);
+            const rateStr = rateDiff >= 0 ? `+${rateDiff}%` : `${rateDiff}%`;
+            const ssml = `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='hu-HU'>` +
+              `<voice name='${voiceName}'>` +
+              `<prosody pitch='+0Hz' rate='${rateStr}' volume='+0%'>` +
+              `${escapeXml(textToSay)}` +
+              `</prosody></voice></speak>`;
+
+            const endpoint = `https://${azureRegion.trim()}.tts.speech.microsoft.com/cognitiveservices/v1`;
+            const response = await fetch(endpoint, {
+              method: 'POST',
+              headers: {
+                'Ocp-Apim-Subscription-Key': azureKey.trim(),
+                'Content-Type': 'application/ssml+xml',
+                'X-Microsoft-OutputFormat': 'audio-24khz-48kbitrate-mono-mp3',
+                'User-Agent': 'HomebookPro'
+              },
+              body: ssml
+            });
+            if (response && response.ok) {
+              const blob = await response.blob();
+              if (blob && blob.size > 100) {
+                await dbPutAudioCache(cacheKey, blob, textToSay);
+                logApp("BUFFER_PREFETCH_OK", `⚡ Azure Puffer előretöltve (${blob.size} bájt) [${voiceName}]`, { text: textToSay.substring(0, 35) });
+              }
+            }
+          }
+        }
+      } catch(err) {
+        logApp("BUFFER_PREFETCH_ERR", "Puffer előretöltési hiba", err);
+      }
+    }
+
     async function playPiperTTS(textToSay, voiceCode, onEndedCallback, sessionToken) {
       const voiceName = voiceCode.replace('piper-', ''); // pl. hu_HU-imre-medium
       let defaultBaseUrl = 'http://localhost:5000';
@@ -2591,6 +2725,9 @@
 
       highlightTTSSentence(item);
       updateChapterProgressDisplay();
+
+      // Háttérbeli előrefutó pufferelés indítása a következő mondatokra (0ms akadozásmentesítés)
+      triggerLookaheadBuffer(currentSentenceIdx, selectedEdgeVoice);
 
       const currSent = document.getElementById('tts-current-sentence');
       if (currSent) currSent.innerText = item.text;
@@ -3126,6 +3263,12 @@
 
       document.getElementById('slider-tts-delay').value = sentenceDelay;
       document.getElementById('lbl-tts-delay').innerText = `${sentenceDelay.toFixed(1)} mp`;
+
+      // Előretöltési Puffer beállítások betöltése
+      const sliderBuffer = document.getElementById('slider-tts-buffer');
+      const lblBuffer = document.getElementById('lbl-tts-buffer');
+      if (sliderBuffer) sliderBuffer.value = ttsBufferSize;
+      if (lblBuffer) lblBuffer.innerText = `${ttsBufferSize} mondat`;
 
       // Azure Beállítások betöltése
       const azKey = localStorage.getItem('ebook_azure_key') || '';
