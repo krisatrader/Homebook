@@ -290,13 +290,23 @@
       </button>
     </div>
 
-    <div class="min-w-0 flex-1">
-      <div class="flex items-center justify-between">
-        <span id="tts-status" class="text-[10px] font-bold text-indigo-400 uppercase tracking-wider truncate">🔊 Magyar Felolvasó</span>
-        <span id="reading-percentage" class="text-[10px] text-slate-400 shrink-0 ml-1">0%</span>
+    <div class="min-w-0 flex-1 space-y-1">
+      <div class="flex items-center justify-between gap-2">
+        <div id="bottom-chapter-title" class="text-xs font-bold text-slate-100 truncate flex items-center gap-1.5 min-w-0">
+          <span class="text-indigo-400 text-xs shrink-0">📖</span>
+          <span id="bottom-chapter-name" class="truncate">Fejezet betöltése...</span>
+        </div>
+        <span id="bottom-chapter-percent" class="text-[11px] font-mono font-bold text-indigo-400 shrink-0">0%</span>
       </div>
-      <div id="tts-current-sentence" class="text-xs text-slate-300 truncate font-serif italic">
-        Kattints a lejátszásra a felolvasáshoz...
+
+      <!-- Fejezet előrehaladási sáv -->
+      <div class="w-full bg-slate-700/70 rounded-full h-1.5 overflow-hidden">
+        <div id="chapter-progress-bar" class="bg-indigo-500 h-full rounded-full transition-all duration-300" style="width: 0%"></div>
+      </div>
+
+      <div class="flex items-center justify-between text-[10px] text-slate-400 leading-none pt-0.5">
+        <span id="bottom-chapter-paragraphs" class="truncate font-medium">1/1 bek.</span>
+        <span id="bottom-chapter-time-left" class="text-indigo-300/90 font-medium shrink-0 ml-1">még ~0 perc</span>
       </div>
     </div>
 
@@ -1181,6 +1191,7 @@
       container.appendChild(fragment);
 
       prepareTTSData();
+      updateChapterProgressDisplay();
       renderDrawerContent(currentDrawerTab);
     }
 
@@ -1615,11 +1626,12 @@
     function updateReadingProgress() {
       if (isProgrammaticScroll) return;
       const container = document.getElementById('reader-container');
-      const progress = (container.scrollTop / (container.scrollHeight - container.clientHeight)) * 100;
+      const totalScroll = container.scrollHeight - container.clientHeight;
+      const progress = totalScroll > 0 ? (container.scrollTop / totalScroll) * 100 : 0;
       const rounded = Math.min(100, Math.max(0, Math.round(progress || 0)));
 
-      document.getElementById('reading-progress-bar').style.width = `${rounded}%`;
-      document.getElementById('reading-percentage').innerText = `${rounded}%`;
+      const topBar = document.getElementById('reading-progress-bar');
+      if (topBar) topBar.style.width = `${rounded}%`;
 
       const pElems = document.querySelectorAll('#reader-content p');
       pElems.forEach((p, idx) => {
@@ -1632,12 +1644,64 @@
         }
       });
 
+      updateChapterProgressDisplay();
       saveReadingProgressToLocal();
 
       const drawer = document.getElementById('drawer');
-      if (!drawer.classList.contains('opacity-0') && currentDrawerTab === 'toc') {
+      if (drawer && !drawer.classList.contains('opacity-0') && currentDrawerTab === 'toc') {
         renderDrawerContent('toc');
       }
+    }
+
+    function updateChapterProgressDisplay() {
+      if (!book || !book.paragraphs || book.paragraphs.length === 0) return;
+
+      let currentChIdx = -1;
+      if (book.chapters && book.chapters.length > 0) {
+        currentChIdx = book.chapters.findIndex(ch => lastSeenPIdx >= ch.startP && lastSeenPIdx <= ch.endP);
+      }
+
+      let chTitle = book.title || "Olvasás";
+      let startP = 0;
+      let endP = Math.max(0, book.paragraphs.length - 1);
+
+      if (currentChIdx !== -1 && book.chapters[currentChIdx]) {
+        const ch = book.chapters[currentChIdx];
+        chTitle = ch.title;
+        startP = ch.startP;
+        endP = ch.endP;
+      }
+
+      const totalPInCh = Math.max(1, endP - startP + 1);
+      const currentPInCh = Math.max(1, Math.min(totalPInCh, lastSeenPIdx - startP + 1));
+      const chPercent = Math.min(100, Math.max(0, Math.round((currentPInCh / totalPInCh) * 100)));
+
+      // Hátralévő szavak és becsült olvasási/hallgatási idő a fejezetből
+      let remainingWords = 0;
+      for (let i = lastSeenPIdx; i <= endP && i < book.paragraphs.length; i++) {
+        const pText = book.paragraphs[i] || '';
+        remainingWords += pText.split(/\s+/).filter(Boolean).length;
+      }
+
+      const effectiveRate = isSpeaking ? ttsRate : 1.0;
+      const wpm = 180 * effectiveRate;
+      const minsLeft = Math.ceil(remainingWords / wpm);
+
+      let timeText = minsLeft <= 1 ? "még < 1 perc" : `még ~${minsLeft} perc`;
+      if (chPercent >= 100) timeText = "✓ Fejezet vége";
+
+      // UI elemek frissítése
+      const nameElem = document.getElementById('bottom-chapter-name');
+      const percentElem = document.getElementById('bottom-chapter-percent');
+      const barElem = document.getElementById('chapter-progress-bar');
+      const pCountElem = document.getElementById('bottom-chapter-paragraphs');
+      const timeLeftElem = document.getElementById('bottom-chapter-time-left');
+
+      if (nameElem) nameElem.innerText = chTitle;
+      if (percentElem) percentElem.innerText = `${chPercent}%`;
+      if (barElem) barElem.style.width = `${chPercent}%`;
+      if (pCountElem) pCountElem.innerText = `${currentPInCh}/${totalPInCh} bek.`;
+      if (timeLeftElem) timeLeftElem.innerText = timeText;
     }
 
     function previousChapter() {
@@ -1676,6 +1740,7 @@
 
         lastSeenPIdx = pIdx;
         book.lastSeenPIdx = pIdx;
+        updateChapterProgressDisplay();
         if (save) saveReadingProgressToLocal();
         syncTTSToParagraph(pIdx);
 
@@ -1691,8 +1756,8 @@
         currentSentenceIdx = sentenceIdx;
         const item = ttsSentences[currentSentenceIdx];
 
-        document.getElementById('tts-current-sentence').innerText = item.text;
-        document.getElementById('tts-status').innerText = `Ugrás ide: ${currentSentenceIdx + 1}/${ttsSentences.length}`;
+        const currSent = document.getElementById('tts-current-sentence');
+        if (currSent) currSent.innerText = item.text;
 
         if (isSpeaking) {
           speakSentence();
@@ -1894,8 +1959,10 @@
       synth.cancel();
       window.activeUtterance = null;
       document.getElementById('btn-play-pause').innerText = '▶';
-      document.getElementById('tts-status').innerText = 'Szüneteltetve';
+      const statElem = document.getElementById('tts-status');
+      if (statElem) statElem.innerText = 'Szüneteltetve';
       removeActiveHighlights();
+      updateChapterProgressDisplay();
       if (wasSpeaking) {
         logApp("TTS_PAUSED", `Felolvasás szüneteltetve mondat #${currentSentenceIdx + 1}`);
       }
@@ -1935,7 +2002,10 @@
       book.lastSeenPIdx = item.pIdx;
 
       highlightTTSSentence(item);
-      document.getElementById('tts-current-sentence').innerText = item.text;
+      updateChapterProgressDisplay();
+
+      const currSent = document.getElementById('tts-current-sentence');
+      if (currSent) currSent.innerText = item.text;
 
       const proceedToNext = () => {
         clearTimeout(playbackSafetyTimeout);
@@ -1955,7 +2025,8 @@
 
       // 1. GOOGLE TRANSLATE GTTS
       if (selectedEdgeVoice === 'gtts-hu') {
-        document.getElementById('tts-status').innerText = `🌐 Google gTTS: ${currentSentenceIdx + 1}/${ttsSentences.length}`;
+        const statElem = document.getElementById('tts-status');
+        if (statElem) statElem.innerText = `🌐 Google gTTS: ${currentSentenceIdx + 1}/${ttsSentences.length}`;
         playGTTS(item.text, proceedToNext);
         return;
       }
@@ -1965,7 +2036,8 @@
       const voiceObj = isSystemHungarian ? null : getSelectedNativeVoiceObj();
       const voiceName = isSystemHungarian ? "Tünde (Továbbfejlesztett rendszerhang)" : (voiceObj ? `${voiceObj.name} (${voiceObj.lang})` : "Rendszerhang");
       logApp("TTS_NATIVE_START", `Natív hang felolvasás: ${voiceName}`, { isSystemHungarian, text: item.text.substring(0, 40) });
-      document.getElementById('tts-status').innerText = `📱 ${voiceName}: ${currentSentenceIdx + 1}/${ttsSentences.length}`;
+      const statElem = document.getElementById('tts-status');
+      if (statElem) statElem.innerText = `📱 ${voiceName}: ${currentSentenceIdx + 1}/${ttsSentences.length}`;
 
       setTimeout(() => {
         if (!isSpeaking) return;
