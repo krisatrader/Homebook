@@ -1711,10 +1711,10 @@
         rawSentences.forEach(s => {
           const trimmed = s.trim();
           if (trimmed.length > 0) {
-            if (trimmed.length <= 110) {
+            if (trimmed.length <= 65) {
               ttsSentences.push({ text: trimmed, pIdx });
             } else {
-              const subChunks = splitLongTextIntoChunks(trimmed, 110);
+              const subChunks = splitLongTextIntoChunks(trimmed, 65);
               subChunks.forEach(chunk => {
                 ttsSentences.push({ text: chunk, pIdx });
               });
@@ -1724,7 +1724,7 @@
       });
     }
 
-    function splitLongTextIntoChunks(text, maxLength) {
+    function splitLongTextIntoChunks(text, maxLength = 65) {
       const chunks = [];
       let remaining = text;
 
@@ -1734,15 +1734,27 @@
           break;
         }
 
-        let splitIdx = remaining.lastIndexOf(',', maxLength);
-        if (splitIdx === -1 || splitIdx < 25) {
+        let splitIdx = -1;
+        const punctuationDelims = [', ', '; ', ': ', ' – ', ' - '];
+        for (const delim of punctuationDelims) {
+          const idx = remaining.lastIndexOf(delim, maxLength);
+          if (idx >= 20 && idx > splitIdx) {
+            splitIdx = idx + delim.length;
+          }
+        }
+
+        if (splitIdx === -1) {
           splitIdx = remaining.lastIndexOf(' ', maxLength);
         }
-        if (splitIdx === -1 || splitIdx < 25) {
+
+        if (splitIdx === -1 || splitIdx < 15) {
           splitIdx = maxLength;
         }
 
-        chunks.push(remaining.substring(0, splitIdx).trim());
+        const chunk = remaining.substring(0, splitIdx).trim();
+        if (chunk.length > 0) {
+          chunks.push(chunk);
+        }
         remaining = remaining.substring(splitIdx).trim();
       }
 
@@ -2082,31 +2094,55 @@
           safeEnd();
         }, estDuration);
 
-        // Safari aktív lejátszásfigyelő (véletlenül kimaradt onended események elkapására)
+        // Safari aktív lejátszásfigyelő (azonnali váltás a hangfolyam végén)
+        let hasStartedPlaying = false;
         let lastTime = -1;
-        let sameTimeCount = 0;
+        let stallCount = 0;
+
         audioWatchdogInterval = setInterval(() => {
           if (hasEnded || sessionToken !== currentTTSSessionToken || !isSpeaking) {
             clearInterval(audioWatchdogInterval);
             return;
           }
-          if (globalAudioPlayer.ended) {
-            safeEnd();
-            return;
-          }
+
           const curr = globalAudioPlayer.currentTime;
           const dur = globalAudioPlayer.duration;
-          if (dur > 0 && isFinite(dur) && curr >= dur - 0.15) {
+
+          if (curr > 0.05) {
+            hasStartedPlaying = true;
+          }
+
+          // 1. Natív ended esemény
+          if (globalAudioPlayer.ended) {
+            logApp("TTS_END_NATIVE", `${source.name} ended=true észlelve`);
             safeEnd();
             return;
           }
-          if (curr > 0.5 && Math.abs(curr - lastTime) < 0.05 && !globalAudioPlayer.paused) {
-            sameTimeCount++;
-            if (sameTimeCount >= 3) { // 300ms elakadás az audio végén
+
+          // 2. Véges duration vége
+          if (dur > 0 && isFinite(dur) && curr >= dur - 0.1) {
+            logApp("TTS_END_DURATION", `${source.name} duration vége (${curr.toFixed(2)}s / ${dur.toFixed(2)}s)`);
+            safeEnd();
+            return;
+          }
+
+          // 3. Safari automatikus leállás a hangfolyam végén (paused=true)
+          if (hasStartedPlaying && globalAudioPlayer.paused) {
+            logApp("TTS_END_PAUSED", `${source.name} hangfolyam befejezve (paused=true @ ${curr.toFixed(2)}s)`);
+            safeEnd();
+            return;
+          }
+
+          // 4. Mozdulatlanság (currentTime nem változik a hang végén)
+          if (hasStartedPlaying && Math.abs(curr - lastTime) < 0.03) {
+            stallCount++;
+            if (stallCount >= 2) { // 200ms mozdulatlanság a hang végén
+              logApp("TTS_END_STALL", `${source.name} pozíció megállt (${curr.toFixed(2)}s)`);
               safeEnd();
+              return;
             }
           } else {
-            sameTimeCount = 0;
+            stallCount = 0;
             lastTime = curr;
           }
         }, 100);
