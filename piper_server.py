@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-Homebook Pro - Neurális TTS & Web Alkalmazás Szerver (Edge-TTS & Piper AI)
-==========================================================================
-Villámgyors felhős és helyi beszédszintetizátor mikroszolgáltatás.
-Támogatott motorok:
-1. Microsoft Edge Neural TTS (Tamás & Noémi) -> 150ms válaszidő, 24kHz stúdióminőség
-2. Piper AI Helyi Neurális Modellek (Imre, Anna, Berta)
+Homebook Pro - Microsoft Edge Neural TTS & Web Alkalmazás Szerver
+=================================================================
+Villámgyors, in-memory streaming neurális beszédszintetizátor és PWA szerver.
+- Microsoft Edge Neural TTS (Tamás & Noémi) -> ~150ms válaszidő, 24kHz stúdióminőség
+- Intelligens szövegtisztítás (sanitize_text_for_tts)
+- Teljes Homebook Pro Web UI kiszolgálása a gyökér címen (/)
 
 Port: 5000 (vagy PORT környezeti változó)
 """
@@ -15,14 +15,10 @@ import sys
 import re
 import json
 import asyncio
-import urllib.request
-import subprocess
-import tempfile
 import mimetypes
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
-# edge-tts importálása ha elérhető
 try:
     import edge_tts
     HAS_EDGE_TTS = True
@@ -31,24 +27,6 @@ except ImportError:
 
 PORT = int(os.environ.get("PORT", 5000))
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODELS_DIR = os.path.join(BASE_DIR, "piper_models")
-
-VOICE_URLS = {
-    "hu_HU-imre-medium": {
-        "onnx": "https://huggingface.co/rhasspy/piper-voices/resolve/main/hu/hu_HU/imre/medium/hu_HU-imre-medium.onnx",
-        "json": "https://huggingface.co/rhasspy/piper-voices/resolve/main/hu/hu_HU/imre/medium/hu_HU-imre-medium.onnx.json"
-    },
-    "hu_HU-anna-medium": {
-        "onnx": "https://huggingface.co/rhasspy/piper-voices/resolve/main/hu/hu_HU/anna/medium/hu_HU-anna-medium.onnx",
-        "json": "https://huggingface.co/rhasspy/piper-voices/resolve/main/hu/hu_HU/anna/medium/hu_HU-anna-medium.onnx.json"
-    },
-    "hu_HU-berta-medium": {
-        "onnx": "https://huggingface.co/rhasspy/piper-voices/resolve/main/hu/hu_HU/berta/medium/hu_HU-berta-medium.onnx",
-        "json": "https://huggingface.co/rhasspy/piper-voices/resolve/main/hu/hu_HU/berta/medium/hu_HU-berta-medium.onnx.json"
-    }
-}
-
-TTS_SEMAPHORE = asyncio.Semaphore(6) if HAS_EDGE_TTS else None
 
 def sanitize_text_for_tts(text: str) -> str:
     """Megtisztítja a szöveget az Edge TTS számára a természetes és zavartalan kiejtéshez."""
@@ -80,7 +58,7 @@ async def synthesize_edge_tts(text: str, voice: str = "hu-HU-TamasNeural", speed
     # Hang kód normalizálás
     if voice.startswith("edge-"):
         voice = voice.replace("edge-", "")
-    if voice in ["hu-HU-Tamas", "tamas"]:
+    if voice in ["hu-HU-Tamas", "tamas", "default"]:
         voice = "hu-HU-TamasNeural"
     elif voice in ["hu-HU-Noemi", "noemi"]:
         voice = "hu-HU-NoemiNeural"
@@ -99,78 +77,16 @@ async def synthesize_edge_tts(text: str, voice: str = "hu-HU-TamasNeural", speed
                 return audio_bytes, "audio/mpeg"
         except Exception as e:
             print(f"[!] Edge TTS hiba (próbálkozás {attempt+1}/3): {e}")
-            await asyncio.sleep(0.2 * (attempt + 1))
-    return None, None
-
-def ensure_piper_model(voice_name="hu_HU-imre-medium"):
-    if voice_name not in VOICE_URLS:
-        voice_name = "hu_HU-imre-medium"
-    
-    os.makedirs(MODELS_DIR, exist_ok=True)
-    onnx_path = os.path.join(MODELS_DIR, f"{voice_name}.onnx")
-    json_path = os.path.join(MODELS_DIR, f"{voice_name}.onnx.json")
-
-    if not os.path.exists(onnx_path):
-        print(f"[*] Piper modell letöltése: {voice_name}.onnx...")
-        urllib.request.urlretrieve(VOICE_URLS[voice_name]["onnx"], onnx_path)
-    
-    if not os.path.exists(json_path):
-        print(f"[*] Piper konfiguráció letöltése: {voice_name}.onnx.json...")
-        urllib.request.urlretrieve(VOICE_URLS[voice_name]["json"], json_path)
-
-    return onnx_path
-
-def synthesize_piper(text, voice_name="hu_HU-imre-medium", speed=1.0):
-    """Piper AI szintézis WAV formátumban."""
-    onnx_path = ensure_piper_model(voice_name)
-    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as out_wav:
-        wav_filename = out_wav.name
-
-    try:
-        length_scale = str(1.0 / max(0.5, min(2.0, float(speed))))
-        cmd = [
-            "piper",
-            "--model", onnx_path,
-            "--output_file", wav_filename,
-            "--length_scale", length_scale
-        ]
-        proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        proc.communicate(input=text.encode("utf-8"))
-
-        if os.path.exists(wav_filename) and os.path.getsize(wav_filename) > 0:
-            with open(wav_filename, "rb") as f:
-                return f.read(), "audio/wav"
-    except Exception as e:
-        print(f"[!] Piper szintézis hiba: {e}")
-    finally:
-        if os.path.exists(wav_filename):
-            try:
-                os.remove(wav_filename)
-            except:
-                pass
+            await asyncio.sleep(0.15 * (attempt + 1))
     return None, None
 
 def perform_tts_synthesis(text: str, voice: str = "hu-HU-TamasNeural", speed: float = 1.0):
-    """Központi TTS szintézis választó."""
-    voice_lower = voice.lower()
-    
-    # 1. Ha Microsoft Edge Neural hangot kérünk (vagy ez az alapértelmezett)
-    if "neural" in voice_lower or voice.startswith("edge-") or voice.startswith("hu-HU") or voice.startswith("en-US") or voice.startswith("de-DE"):
-        if HAS_EDGE_TTS:
-            try:
-                return asyncio.run(synthesize_edge_tts(text, voice, speed))
-            except Exception as e:
-                print(f"[!] Asyncio Edge TTS hiba: {e}")
-    
-    # 2. Ha Piper hangot kérünk
-    if "piper" in voice_lower or "imre" in voice_lower or "anna" in voice_lower or "berta" in voice_lower:
-        piper_voice = voice.replace("piper-", "")
-        return synthesize_piper(text, piper_voice, speed)
-    
-    # Fallback: Edge TTS ha elérhető
+    """Központi Edge-TTS szintézis választó."""
     if HAS_EDGE_TTS:
-        return asyncio.run(synthesize_edge_tts(text, "hu-HU-TamasNeural", speed))
-    
+        try:
+            return asyncio.run(synthesize_edge_tts(text, voice, speed))
+        except Exception as e:
+            print(f"[!] Asyncio Edge TTS hiba: {e}")
     return None, None
 
 class HomebookServerHandler(BaseHTTPRequestHandler):
@@ -225,9 +141,9 @@ class HomebookServerHandler(BaseHTTPRequestHandler):
             self.end_headers()
             status_data = {
                 "status": "ok",
-                "service": "Homebook Universal Neural TTS",
+                "service": "Homebook Edge Neural TTS",
                 "has_edge_tts": HAS_EDGE_TTS,
-                "voices": ["hu-HU-TamasNeural", "hu-HU-NoemiNeural", "hu_HU-imre-medium", "hu_HU-anna-medium"]
+                "voices": ["hu-HU-TamasNeural", "hu-HU-NoemiNeural", "en-US-GuyNeural", "en-US-JennyNeural", "de-DE-KatjaNeural"]
             }
             self.wfile.write(json.dumps(status_data).encode("utf-8"))
             return
@@ -314,10 +230,10 @@ class HomebookServerHandler(BaseHTTPRequestHandler):
 
 def run_server():
     print("=" * 60)
-    print("🌟 HOMEBOOK PRO - UNIVERSAL NEURAL TTS & WEB APP SZERVER")
+    print("🌟 HOMEBOOK PRO - EDGE NEURAL TTS & WEB APP SZERVER")
     print(f"📡 Cím: http://localhost:{PORT}")
     print("📖 Web UI: http://localhost:{PORT}/")
-    print("🎙️ Motorok: Microsoft Edge-TTS (Tamás & Noémi) + Piper AI")
+    print("🎙️ Motor: Microsoft Edge-TTS (Tamás & Noémi)")
     print("=" * 60)
     server = HTTPServer(("0.0.0.0", PORT), HomebookServerHandler)
     server.serve_forever()
