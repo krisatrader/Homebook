@@ -614,10 +614,10 @@
         // Magyar hangok rangsorolása minőség szerint (Siri, Premium, Enhanced előre)
         huVoices.sort((a, b) => {
           const score = (v) => 
-            (v.name.includes('Premium') ? 5 : 0) + 
-            (v.name.includes('Enhanced') ? 4 : 0) + 
-            (v.name.includes('Fokozott') ? 4 : 0) + 
-            (v.name.includes('Siri') ? 3 : 0);
+            ((v.name + (v.voiceURI || '')).toLowerCase().includes('premium') ? 6 : 0) + 
+            ((v.name + (v.voiceURI || '')).toLowerCase().includes('enhanced') ? 4 : 0) + 
+            ((v.name + (v.voiceURI || '')).toLowerCase().includes('fokozott') ? 4 : 0) + 
+            ((v.name + (v.voiceURI || '')).toLowerCase().includes('siri') ? 3 : 0);
           return score(b) - score(a);
         });
 
@@ -634,9 +634,16 @@
           const huGroup = document.createElement('optgroup');
           huGroup.label = `🇭🇺 Magyar Rendszerhangok (${huVoices.length} db)`;
           huVoices.forEach((v) => {
+            let qualityTag = '';
+            const uri = (v.voiceURI || '').toLowerCase();
+            const nameLower = (v.name || '').toLowerCase();
+            if (uri.includes('premium') && !nameLower.includes('premium')) qualityTag = ' [Prémium]';
+            else if ((uri.includes('enhanced') || uri.includes('fokozott')) && !nameLower.includes('enhanced') && !nameLower.includes('fokozott')) qualityTag = ' [Fokozott]';
+            else if (uri.includes('compact') && !nameLower.includes('kompakt')) qualityTag = ' [Kompakt]';
+
             const opt = document.createElement('option');
-            opt.value = `voice-${v.name}-${v.lang}`;
-            opt.innerText = `🇭🇺 ${v.name} (${v.lang})`;
+            opt.value = `voice-${v.voiceURI || (v.name + '-' + v.lang)}`;
+            opt.innerText = `🇭🇺 ${v.name}${qualityTag} (${v.lang})`;
             huGroup.appendChild(opt);
           });
           select.appendChild(huGroup);
@@ -647,7 +654,7 @@
           otherGroup.label = `🌍 Összes elérhető TTS hang (${otherVoices.length} db)`;
           otherVoices.forEach((v) => {
             const opt = document.createElement('option');
-            opt.value = `voice-${v.name}-${v.lang}`;
+            opt.value = `voice-${v.voiceURI || (v.name + '-' + v.lang)}`;
             opt.innerText = `🗣️ ${v.name} (${v.lang})`;
             otherGroup.appendChild(opt);
           });
@@ -670,7 +677,7 @@
 
       if (selectedEdgeVoice.startsWith('voice-')) {
         const key = selectedEdgeVoice.replace('voice-', '');
-        const found = nativeVoicesList.find(v => `${v.name}-${v.lang}` === key);
+        const found = nativeVoicesList.find(v => (v.voiceURI === key) || (`${v.name}-${v.lang}` === key));
         if (found) return found;
       }
 
