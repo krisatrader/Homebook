@@ -306,6 +306,7 @@
 
       <div class="flex items-center justify-between text-[10px] text-slate-400 leading-none pt-0.5">
         <span id="bottom-chapter-paragraphs" class="truncate font-medium">1/1 bek.</span>
+        <span id="bottom-voice-name" class="text-indigo-300 font-medium truncate px-1 text-center" title="Aktuális felolvasó hang">🎙️ MS Tamás</span>
         <span id="bottom-chapter-time-left" class="text-indigo-300/90 font-medium shrink-0 ml-1">még ~0 perc</span>
       </div>
     </div>
@@ -1851,13 +1852,34 @@
       const percentElem = document.getElementById('bottom-chapter-percent');
       const barElem = document.getElementById('chapter-progress-bar');
       const pCountElem = document.getElementById('bottom-chapter-paragraphs');
+      const voiceElem = document.getElementById('bottom-voice-name');
       const timeLeftElem = document.getElementById('bottom-chapter-time-left');
 
       if (nameElem) nameElem.innerText = chTitle;
       if (percentElem) percentElem.innerText = `${chPercent}%`;
       if (barElem) barElem.style.width = `${chPercent}%`;
       if (pCountElem) pCountElem.innerText = `${currentPInCh}/${totalPInCh} bek.`;
+      if (voiceElem) voiceElem.innerText = getCurrentVoiceDisplayName();
       if (timeLeftElem) timeLeftElem.innerText = timeText;
+    }
+
+    function getCurrentVoiceDisplayName() {
+      if (!selectedEdgeVoice) return '🎙️ Tamás (Férfi)';
+      if (selectedEdgeVoice === 'edge-hu-HU-TamasNeural') return '🎙️ MS Tamás (Férfi)';
+      if (selectedEdgeVoice === 'edge-hu-HU-NoemiNeural') return '🎙️ MS Noémi (Női)';
+      if (selectedEdgeVoice === 'edge-en-US-GuyNeural') return '🎙️ MS Guy (Angol)';
+      if (selectedEdgeVoice === 'edge-en-US-JennyNeural') return '🎙️ MS Jenny (Angol)';
+      if (selectedEdgeVoice === 'edge-de-DE-KatjaNeural') return '🎙️ MS Katja (Német)';
+      if (selectedEdgeVoice === 'piper-hu_HU-imre-medium') return '🤖 Piper Imre (Férfi)';
+      if (selectedEdgeVoice === 'piper-hu_HU-anna-medium') return '🤖 Piper Anna (Női)';
+      if (selectedEdgeVoice === 'piper-hu_HU-berta-medium') return '🤖 Piper Berta (Női)';
+      if (selectedEdgeVoice === 'system-hu') return '📱 Tünde (Rendszer)';
+      if (selectedEdgeVoice.startsWith('voice-')) {
+        const key = selectedEdgeVoice.replace('voice-', '');
+        const v = nativeVoicesList.find(x => (x.voiceURI === key) || (`${x.name}-${x.lang}` === key));
+        return v ? `📱 ${v.name}` : `📱 Rendszerhang`;
+      }
+      return '🎙️ ' + selectedEdgeVoice.replace('edge-', '').replace('piper-', '');
     }
 
     function previousChapter() {
@@ -2079,6 +2101,7 @@
       selectedEdgeVoice = val;
       localStorage.setItem('ebook_edge_voice', val);
       logApp("VOICE_CHANGED", `Felolvasó hang kiválasztva: ${val}`);
+      updateChapterProgressDisplay();
       if (isSpeaking) speakSentence(true);
     }
 
