@@ -688,6 +688,7 @@
     let ttsRate = parseFloat(localStorage.getItem('ebook_tts_rate') || '1.0');
     
     let globalAudioPlayer = new Audio();
+    let currentTTSSessionToken = 0;
     let currentGTTSBlobUrl = null;
     let playbackSafetyTimeout = null;
     let scrollThrottleTimeout = null;
@@ -1855,25 +1856,28 @@
 
     async function playGTTS(textToSay, onEndedCallback) {
       stopAudioPlayback();
+      const sessionToken = ++currentTTSSessionToken;
 
-      logApp("TTS_REQ", "gTTS kérés összeállítása", { text: textToSay.substring(0, 40), length: textToSay.length });
+      logApp("TTS_REQ", `gTTS kérés #${sessionToken}`, { text: textToSay.substring(0, 40), length: textToSay.length });
 
       const encodedText = encodeURIComponent(textToSay);
       const sources = [
-        { name: "Google API (gtx)", url: `https://translate.googleapis.com/translate_tts?client=gtx&ie=UTF-8&tl=hu&q=${encodedText}` },
         { name: "Google Translate (tw-ob)", url: `https://translate.google.com/translate_tts?ie=UTF-8&tl=hu&client=tw-ob&q=${encodedText}` },
-        { name: "YouDao Mirror", url: `https://dict.youdao.com/dictvoice?audio=${encodedText}&le=hu` }
+        { name: "Google Translate Mirror", url: `https://translate.google.com/translate_tts?ie=UTF-8&tl=hu&total=1&idx=0&client=tw-ob&q=${encodedText}` },
+        { name: "Google API (gtx)", url: `https://translate.googleapis.com/translate_tts?client=gtx&ie=UTF-8&tl=hu&q=${encodedText}` }
       ];
 
       const trySource = (idx) => {
-        if (!isSpeaking) {
-          logApp("TTS_ABORT", "Lejátszás megszakítva (isSpeaking=false)");
+        if (!isSpeaking || sessionToken !== currentTTSSessionToken) {
+          logApp("TTS_ABORT", `Kérés #${sessionToken} megszakítva (isSpeaking=${isSpeaking})`);
           return;
         }
 
+        clearTimeout(playbackSafetyTimeout);
+
         if (idx >= sources.length) {
-          logApp("TTS_FAIL_ALL", "Minden online TTS forrás sikertelen volt.");
-          showToast("❌ Google TTS hiba! Nyisd meg a 📋 Rendszernaplót vagy válts natív magyar hangra.");
+          logApp("TTS_FAIL_ALL", `Minden online TTS forrás sikertelen a #${sessionToken} kérésnél.`);
+          showToast("❌ Google TTS hiba! Válassz natív magyar hangot a Beállításokban (⚙️).");
           pauseTTS();
           return;
         }
@@ -1886,7 +1890,7 @@
 
         let hasEnded = false;
         const safeEnd = () => {
-          if (hasEnded) return;
+          if (hasEnded || sessionToken !== currentTTSSessionToken) return;
           hasEnded = true;
           clearTimeout(playbackSafetyTimeout);
           logApp("TTS_SUCCESS", `Sikeres felolvasás: ${source.name}`);
@@ -1895,21 +1899,33 @@
 
         globalAudioPlayer.onended = safeEnd;
         globalAudioPlayer.onerror = (e) => {
+          if (sessionToken !== currentTTSSessionToken) return;
+          clearTimeout(playbackSafetyTimeout);
           const mediaErr = globalAudioPlayer.error;
           const errInfo = mediaErr ? { code: mediaErr.code, message: mediaErr.message } : { info: "Hálózati/Dekódolási hiba" };
-          logApp("TTS_ERROR", `${source.name} sikertelen`, errInfo);
+          logApp("TTS_ERROR", `${source.name} hiba`, errInfo);
           trySource(idx + 1);
         };
 
-        const estDuration = Math.max(5000, (textToSay.length / (8 * ttsRate)) * 1000 + 4000);
+        // Bőkezű időzítés a mondathosszhoz és a beszédsebességhez igazítva
+        const estDuration = Math.max(8000, (textToSay.length / (5 * ttsRate)) * 1000 + 5000);
         playbackSafetyTimeout = setTimeout(() => {
+          if (sessionToken !== currentTTSSessionToken) return;
           logApp("TTS_TIMEOUT", `${source.name} időtúllépés, továbblépés`);
           safeEnd();
         }, estDuration);
 
         globalAudioPlayer.play().then(() => {
-          logApp("TTS_PLAYING", `Audio lejátszás elindult: ${source.name}`);
+          if (sessionToken === currentTTSSessionToken) {
+            logApp("TTS_PLAYING", `Audio lejátszás elindult: ${source.name}`);
+          }
         }).catch(err => {
+          if (err.name === 'AbortError') {
+            logApp("TTS_ABORT_SKIP", `${source.name} AbortError (felváltva)`);
+            return;
+          }
+          if (sessionToken !== currentTTSSessionToken) return;
+          clearTimeout(playbackSafetyTimeout);
           logApp("TTS_PLAY_REJECTED", `${source.name} play() elutasítva`, { name: err.name, message: err.message });
           trySource(idx + 1);
         });
