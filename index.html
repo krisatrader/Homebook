@@ -2467,7 +2467,11 @@
 
     async function playPiperTTS(textToSay, voiceCode, onEndedCallback, sessionToken) {
       const voiceName = voiceCode.replace('piper-', ''); // pl. hu_HU-imre-medium
-      const baseUrl = (localStorage.getItem('ebook_piper_url') || 'http://localhost:5000').replace(/\/+$/, '');
+      let defaultBaseUrl = 'http://localhost:5000';
+      if (window.location.hostname.includes('onrender.com') || window.location.port === '5000') {
+        defaultBaseUrl = window.location.origin;
+      }
+      const baseUrl = (localStorage.getItem('ebook_piper_url') || defaultBaseUrl).replace(/\/+$/, '');
 
       // 0. Gyorsítótár ellenőrzése (0ms azonnali lejátszás)
       const isCached = await checkAudioCacheAndPlay(textToSay, voiceCode, onEndedCallback, sessionToken);
@@ -3132,7 +3136,11 @@
       if (inputReg) inputReg.value = azReg;
 
       // Piper AI Beállítások betöltése
-      const piperUrl = localStorage.getItem('ebook_piper_url') || 'http://localhost:5000';
+      let defaultPiperUrl = 'http://localhost:5000';
+      if (window.location.hostname.includes('onrender.com') || window.location.port === '5000') {
+        defaultPiperUrl = window.location.origin;
+      }
+      const piperUrl = localStorage.getItem('ebook_piper_url') || defaultPiperUrl;
       const inputPiper = document.getElementById('input-piper-url');
       if (inputPiper) inputPiper.value = piperUrl;
 

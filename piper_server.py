@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """
-Homebook Pro - Piper AI Magyar Neurális TTS Szerver
-===================================================
-Egyetlen paranccsal elindítható, villámgyors helyi és felhős TTS mikroszolgáltatás.
+Homebook Pro - Piper AI Magyar Neurális TTS & Web Alkalmazás Szerver
+===================================================================
+Egyetlen paranccsal elindítható, villámgyors helyi és felhős alkalmazás és TTS mikroszolgáltatás.
+Kiszolgálja:
+1. A Homebook Pro teljes Web App felületét (index.html, sw.js) a gyökér címen (/)
+2. A Piper AI magyar neurális beszédmotor REST & OpenAI kompatibilis API-ját (/api/tts, /v1/audio/speech)
+
 Támogatott magyar hangmodellek:
 - hu_HU-imre-medium (Imre - Férfi)
 - hu_HU-anna-medium (Anna - Női)
 - hu_HU-berta-medium (Berta - Női)
-
-Használat:
-  pip install piper-tts
-  python piper_server.py
 
 Port: 5000 (vagy PORT környezeti változó)
 """
@@ -21,11 +21,13 @@ import json
 import urllib.request
 import subprocess
 import tempfile
+import mimetypes
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
 PORT = int(os.environ.get("PORT", 5000))
-MODELS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "piper_models")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODELS_DIR = os.path.join(BASE_DIR, "piper_models")
 
 VOICE_URLS = {
     "hu_HU-imre-medium": {
@@ -91,7 +93,7 @@ def synthesize_speech(text, voice_name="hu_HU-imre-medium", speed=1.0):
                 pass
     return None
 
-class PiperHTTPHandler(BaseHTTPRequestHandler):
+class HomebookServerHandler(BaseHTTPRequestHandler):
     def _send_cors_headers(self):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
@@ -104,7 +106,10 @@ class PiperHTTPHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         parsed = urlparse(self.path)
-        if parsed.path in ["/api/tts", "/synthesize"]:
+        path = parsed.path
+
+        # 1. Piper AI TTS Szintézis Végpont
+        if path in ["/api/tts", "/synthesize"]:
             params = parse_qs(parsed.query)
             text = params.get("text", [""])[0]
             voice = params.get("voice", ["hu_HU-imre-medium"])[0]
@@ -113,6 +118,7 @@ class PiperHTTPHandler(BaseHTTPRequestHandler):
             if not text:
                 self.send_response(400)
                 self._send_cors_headers()
+                self.send_header("Content-Type", "application/json")
                 self.end_headers()
                 self.wfile.write(b'{"error": "Hianyzo text parameter"}')
                 return
@@ -129,12 +135,59 @@ class PiperHTTPHandler(BaseHTTPRequestHandler):
                 self.send_response(500)
                 self._send_cors_headers()
                 self.end_headers()
-        else:
+            return
+
+        # 2. Piper API Állapot / Egészségügyi Végpont
+        if path in ["/api/status", "/health"]:
             self.send_response(200)
             self._send_cors_headers()
             self.send_header("Content-Type", "application/json")
             self.end_headers()
             self.wfile.write(b'{"status": "ok", "service": "Homebook Piper TTS", "voices": ["hu_HU-imre-medium", "hu_HU-anna-medium", "hu_HU-berta-medium"]}')
+            return
+
+        # 3. Homebook Pro Web Alkalmazás Kiszolgálása (index.html, sw.js, stb.)
+        if path == "/" or path == "/index.html":
+            file_path = os.path.join(BASE_DIR, "index.html")
+        else:
+            rel_path = path.lstrip("/")
+            file_path = os.path.join(BASE_DIR, rel_path)
+
+        if os.path.exists(file_path) and os.path.isfile(file_path):
+            content_type, _ = mimetypes.guess_type(file_path)
+            if not content_type:
+                if file_path.endswith(".js"):
+                    content_type = "application/javascript"
+                elif file_path.endswith(".html"):
+                    content_type = "text/html; charset=utf-8"
+                else:
+                    content_type = "application/octet-stream"
+
+            with open(file_path, "rb") as f:
+                content = f.read()
+
+            self.send_response(200)
+            self._send_cors_headers()
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(content)))
+            self.end_headers()
+            self.wfile.write(content)
+        else:
+            # Ha nincs ilyen fájl, visszairányítjuk az index.html-re (SPA viselkedés)
+            index_path = os.path.join(BASE_DIR, "index.html")
+            if os.path.exists(index_path):
+                with open(index_path, "rb") as f:
+                    content = f.read()
+                self.send_response(200)
+                self._send_cors_headers()
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(content)))
+                self.end_headers()
+                self.wfile.write(content)
+            else:
+                self.send_response(404)
+                self._send_cors_headers()
+                self.end_headers()
 
     def do_POST(self):
         parsed = urlparse(self.path)
@@ -176,11 +229,16 @@ class PiperHTTPHandler(BaseHTTPRequestHandler):
 
 def run_server():
     print("=" * 60)
-    print("🤖 HOMEBOOK PRO - PIPER AI MAGYAR NEURÁLIS TTS SZERVER")
+    print("🤖 HOMEBOOK PRO - WEB APP & PIPER NEURÁLIS TTS SZERVER")
     print(f"📡 Cím: http://localhost:{PORT}")
-    print("🎙️ Elérhető modellek: hu_HU-imre-medium (Férfi), hu_HU-anna-medium (Női)")
+    print("📖 Web UI: http://localhost:{PORT}/")
+    print("🎙️ Piper Modellek: hu_HU-imre-medium, hu_HU-anna-medium, hu_HU-berta-medium")
     print("=" * 60)
-    server = HTTPServer(("0.0.0.0", PORT), PiperHTTPHandler)
+    
+    # Előtöltjük az Imre magyar hangmodellt induláskor
+    ensure_model("hu_HU-imre-medium")
+    
+    server = HTTPServer(("0.0.0.0", PORT), HomebookServerHandler)
     server.serve_forever()
 
 if __name__ == "__main__":
