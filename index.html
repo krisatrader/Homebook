@@ -793,28 +793,34 @@
 
         select.innerHTML = '<option value="gtts-hu">🌐 Google Translate TTS (gTTS Online - Tiszta magyar)</option>';
 
+        const huGroup = document.createElement('optgroup');
+        huGroup.label = `🇭🇺 Magyar Rendszerhangok`;
+
+        // 1. Elsődleges továbbfejlesztett rendszerhang beállítás
+        const optSystem = document.createElement('option');
+        optSystem.value = "system-hu";
+        optSystem.innerText = "⭐ 🇭🇺 Rendszerhang: Tünde (Továbbfejlesztett / Rendszerbeállítás)";
+        huGroup.appendChild(optSystem);
+
         if (huVoices.length > 0) {
-          const huGroup = document.createElement('optgroup');
-          huGroup.label = `🇭🇺 Magyar Rendszerhangok (${huVoices.length} db)`;
           huVoices.forEach((v) => {
             let qualityTag = '';
             const uri = (v.voiceURI || '').toLowerCase();
             const nameLower = (v.name || '').toLowerCase();
             if (uri.includes('premium') && !nameLower.includes('premium')) qualityTag = ' [Prémium]';
             else if ((uri.includes('enhanced') || uri.includes('fokozott')) && !nameLower.includes('enhanced') && !nameLower.includes('fokozott')) qualityTag = ' [Fokozott]';
-            else if (uri.includes('compact') && !nameLower.includes('kompakt')) qualityTag = ' [Kompakt]';
 
             const opt = document.createElement('option');
             opt.value = `voice-${v.voiceURI || (v.name + '-' + v.lang)}`;
             opt.innerText = `🇭🇺 ${v.name}${qualityTag} (${v.lang})`;
             huGroup.appendChild(opt);
           });
-          select.appendChild(huGroup);
         }
+        select.appendChild(huGroup);
 
         if (otherVoices.length > 0) {
           const otherGroup = document.createElement('optgroup');
-          otherGroup.label = `🌍 Összes elérhető TTS hang (${otherVoices.length} db)`;
+          otherGroup.label = `🌍 Összes egyéb TTS hang (${otherVoices.length} db)`;
           otherVoices.forEach((v) => {
             const opt = document.createElement('option');
             opt.value = `voice-${v.voiceURI || (v.name + '-' + v.lang)}`;
@@ -836,7 +842,7 @@
     }
 
     function getSelectedNativeVoiceObj() {
-      if (selectedEdgeVoice === 'gtts-hu') return null;
+      if (selectedEdgeVoice === 'gtts-hu' || selectedEdgeVoice === 'system-hu') return null;
 
       if (selectedEdgeVoice.startsWith('voice-')) {
         const key = selectedEdgeVoice.replace('voice-', '');
@@ -1805,20 +1811,20 @@
       }
 
       // 2. ELÉRHETŐ ESZKÖZ / RENDSZER NATÍV TTS HANGOK
-      const voiceObj = getSelectedNativeVoiceObj();
-      const voiceName = voiceObj ? `${voiceObj.name} (${voiceObj.lang})` : "Rendszerhang";
-      logApp("TTS_NATIVE_START", `Natív hang felolvasás: ${voiceName}`, { text: item.text.substring(0, 40) });
+      const isSystemHungarian = (selectedEdgeVoice === 'system-hu' || selectedEdgeVoice.toLowerCase().includes('tunde') || selectedEdgeVoice.toLowerCase().includes('tünde'));
+      const voiceObj = isSystemHungarian ? null : getSelectedNativeVoiceObj();
+      const voiceName = isSystemHungarian ? "Tünde (Továbbfejlesztett rendszerhang)" : (voiceObj ? `${voiceObj.name} (${voiceObj.lang})` : "Rendszerhang");
+      logApp("TTS_NATIVE_START", `Natív hang felolvasás: ${voiceName}`, { isSystemHungarian, text: item.text.substring(0, 40) });
       document.getElementById('tts-status').innerText = `📱 ${voiceName}: ${currentSentenceIdx + 1}/${ttsSentences.length}`;
 
       setTimeout(() => {
         if (!isSpeaking) return;
 
         const utter = new SpeechSynthesisUtterance(item.text);
-        if (voiceObj) {
+        utter.lang = 'hu-HU';
+        if (voiceObj && !isSystemHungarian) {
           utter.voice = voiceObj;
           utter.lang = voiceObj.lang || 'hu-HU';
-        } else {
-          utter.lang = 'hu-HU';
         }
         utter.rate = ttsRate;
 
