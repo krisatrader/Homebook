@@ -1,4 +1,4 @@
-const CACHE_NAME = 'homebook-cache-v2';
+const CACHE_NAME = 'homebook-cache-v3';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -7,12 +7,12 @@ const ASSETS_TO_CACHE = [
 ];
 
 self.addEventListener('install', (event) => {
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll(ASSETS_TO_CACHE);
     })
   );
-  self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
@@ -25,22 +25,22 @@ self.addEventListener('activate', (event) => {
           }
         })
       );
-    })
+    }).then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
-// Network-first stratégia: Mindig a legfrissebb GitHub Pages verziót kéri le online állapotban, és offline esetén használja a cache-t
+// Network-First: online állapotban azonnal lekéri a friss GitHub Pages verziót, offline esetén cache-ből szolgálja ki
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
-  // Külső audio API hívások átengedése normálisan
+  // Külső audio API hívások közvetlen átengedése
   if (event.request.url.includes('translate.google.com') || event.request.url.includes('api.mymemory')) {
     return;
   }
 
+  // Navigációs és HTML kérések mindig a hálózatról frissülnek először
   event.respondWith(
-    fetch(event.request)
+    fetch(event.request, { cache: 'no-cache' })
       .then((networkResponse) => {
         if (networkResponse && networkResponse.status === 200 && event.request.url.startsWith(self.location.origin)) {
           const responseClone = networkResponse.clone();

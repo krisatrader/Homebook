@@ -7,6 +7,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Home E-Book Pro">
   <meta name="theme-color" content="#0f172a">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <link rel="manifest" href="manifest.json">
   <link rel="icon" type="image/svg+xml" href="icon.svg">
   <link rel="apple-touch-icon" href="icon.svg">
@@ -517,7 +520,6 @@
     let highlights = [];
     let notes = [];
     let lastSeenPIdx = 0;
-    let myFolderName = "Ebook";
     let pendingNoteQuote = "";
 
     let currentFontSize = 18;
@@ -548,13 +550,22 @@
 
     window.addEventListener('DOMContentLoaded', async () => {
       if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('./sw.js').then((reg) => {
+        navigator.serviceWorker.register('./sw.js?v=3').then((reg) => {
           reg.update().catch(() => {});
+          reg.onupdatefound = () => {
+            const installingWorker = reg.installing;
+            if (installingWorker) {
+              installingWorker.onstatechange = () => {
+                if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                  window.location.reload();
+                }
+              };
+            }
+          };
         }).catch(() => {});
       }
       populateNativeVoices();
       loadStoredSettings();
-      loadStoredFolderName();
       setupSelectionListener();
 
       const storedBooks = await dbLoadAllBooks();
@@ -656,7 +667,6 @@
       const backupData = {
         version: 1,
         exportedAt: new Date().toISOString(),
-        folderName: myFolderName,
         activeBookId: currentBookId,
         library: myLibrary,
         bookmarks: bookmarks,
@@ -701,12 +711,6 @@
           await dbSaveBook(b);
         }
 
-        if (data.folderName) {
-          myFolderName = data.folderName;
-          localStorage.setItem('ebook_folder_name', myFolderName);
-          loadStoredFolderName();
-        }
-
         if (data.bookmarks) bookmarks = data.bookmarks;
         if (data.highlights) highlights = data.highlights;
         if (data.notes) notes = data.notes;
@@ -722,20 +726,6 @@
       }
 
       event.target.value = '';
-    }
-
-    function loadStoredFolderName() {
-      const saved = localStorage.getItem('ebook_folder_name');
-      if (saved) {
-        myFolderName = saved;
-      }
-      const input = document.getElementById('folder-name-input');
-      if (input) input.value = myFolderName;
-    }
-
-    function saveFolderNameInput(val) {
-      myFolderName = val.trim() || "Ebook";
-      localStorage.setItem('ebook_folder_name', myFolderName);
     }
 
     function saveReadingProgressToLocal() {
@@ -969,7 +959,6 @@
       const modal = document.getElementById('library-modal');
       if (modal.classList.contains('opacity-0')) {
         modal.classList.remove('opacity-0', 'pointer-events-none');
-        loadStoredFolderName();
         renderMyBookshelf('my-books');
       } else {
         modal.classList.add('opacity-0', 'pointer-events-none');
