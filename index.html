@@ -498,6 +498,24 @@
           </div>
         </div>
 
+        <!-- Piper AI Neurális TTS Beállítások (Helyi / Felhős szerver) -->
+        <div class="pt-2 border-t border-slate-800/80 space-y-2">
+          <button type="button" onclick="togglePiperSettings()" class="w-full flex items-center justify-between text-[11px] font-bold text-emerald-300 uppercase hover:text-emerald-200">
+            <span class="flex items-center gap-1.5"><span>🤖</span> Piper AI Neurális Motor (Helyi / Felhős)</span>
+            <span id="piper-chevron" class="text-xs">▼</span>
+          </button>
+          <div id="piper-settings-box" class="hidden space-y-2 pt-1">
+            <div class="space-y-1">
+              <label class="text-[10px] font-bold text-slate-400 uppercase">Piper Szerver URL</label>
+              <input type="text" id="input-piper-url" placeholder="http://localhost:5000" oninput="savePiperConfig()" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono">
+            </div>
+            <button type="button" onclick="testPiperConnection()" class="w-full py-2 bg-emerald-800/40 hover:bg-emerald-700/50 border border-emerald-600/30 rounded-xl text-xs font-semibold text-emerald-300 flex items-center justify-center gap-1.5 transition active:scale-95">
+              <span>🔊</span> Piper AI Hang Tesztelése
+            </button>
+            <p class="text-[10px] text-slate-400">A Piper AI egy villámgyors neurális TTS motor. Helyi gépen (<code class="text-emerald-400 font-mono">localhost:5000</code>) vagy felhős szerveren (Render) futtatható magyar Imre (férfi) és Anna/Berta (női) hangmodellekkel.</p>
+          </div>
+        </div>
+
         <div class="pt-2 border-t border-slate-800/80 space-y-2">
           <div class="flex items-center justify-between bg-slate-900/60 p-3 rounded-xl border border-slate-700/50">
             <div>
@@ -1046,7 +1064,23 @@
         });
         select.appendChild(edgeGroup);
 
-        // 2. MAGYAR RENDSZERHANGOK CSOPORT
+        // 2. PIPER AI NEURÁLIS TTS CSOPORT (HELYI / FELHŐS)
+        const piperGroup = document.createElement('optgroup');
+        piperGroup.label = `🤖 Piper AI Neurális Beszédmotor (Helyi / Render)`;
+        const piperVoices = [
+          { id: 'piper-hu_HU-imre-medium', name: '🤖 🇭🇺 Piper AI: Imre (Férfi - Neurális Magyar)' },
+          { id: 'piper-hu_HU-anna-medium', name: '🤖 🇭🇺 Piper AI: Anna (Női - Neurális Magyar)' },
+          { id: 'piper-hu_HU-berta-medium', name: '🤖 🇭🇺 Piper AI: Berta (Női - Neurális Magyar)' }
+        ];
+        piperVoices.forEach(pv => {
+          const opt = document.createElement('option');
+          opt.value = pv.id;
+          opt.innerText = pv.name;
+          piperGroup.appendChild(opt);
+        });
+        select.appendChild(piperGroup);
+
+        // 3. MAGYAR RENDSZERHANGOK CSOPORT
         const huGroup = document.createElement('optgroup');
         huGroup.label = `📱 Helyi Rendszerhangok (Offline)`;
 
@@ -1096,7 +1130,7 @@
     }
 
     function getSelectedNativeVoiceObj() {
-      if (selectedEdgeVoice.startsWith('edge-') || selectedEdgeVoice === 'system-hu') return null;
+      if (selectedEdgeVoice.startsWith('edge-') || selectedEdgeVoice.startsWith('piper-') || selectedEdgeVoice === 'system-hu') return null;
 
       if (selectedEdgeVoice.startsWith('voice-')) {
         const key = selectedEdgeVoice.replace('voice-', '');
@@ -2122,6 +2156,52 @@
       logApp("AZURE_CONFIG_SAVED", `Azure konfiguráció elmentve (${reg})`);
     }
 
+    function togglePiperSettings() {
+      const box = document.getElementById('piper-settings-box');
+      const chev = document.getElementById('piper-chevron');
+      if (box) {
+        box.classList.toggle('hidden');
+        if (chev) chev.innerText = box.classList.contains('hidden') ? '▼' : '▲';
+      }
+    }
+
+    function savePiperConfig() {
+      const url = document.getElementById('input-piper-url')?.value?.trim() || 'http://localhost:5000';
+      localStorage.setItem('ebook_piper_url', url);
+      logApp("PIPER_CONFIG_SAVED", `Piper URL elmentve: ${url}`);
+    }
+
+    async function testPiperConnection() {
+      const baseUrl = (document.getElementById('input-piper-url')?.value?.trim() || localStorage.getItem('ebook_piper_url') || 'http://localhost:5000').replace(/\/+$/, '');
+      showToast("⏳ Piper AI kapcsolat tesztelése...");
+      try {
+        const testText = "Ez egy sikeres Piper AI neurális hang teszt.";
+        let res = null;
+        try {
+          res = await fetch(`${baseUrl}/v1/audio/speech`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model: 'hu_HU-imre-medium', voice: 'hu_HU-imre-medium', input: testText })
+          });
+        } catch(e1) {
+          res = await fetch(`${baseUrl}/api/tts?text=${encodeURIComponent(testText)}&voice=hu_HU-imre-medium`);
+        }
+
+        if (res && res.ok) {
+          const blob = await res.blob();
+          const testAudio = new Audio(URL.createObjectURL(blob));
+          testAudio.play();
+          showToast("✅ Piper AI sikeresen csatlakozva és megszólalt!");
+          logApp("PIPER_TEST_OK", "Piper AI szerver sikeresen válaszolt", { url: baseUrl, size: blob.size });
+        } else {
+          showToast(`❌ Piper AI válaszhiba: HTTP ${res ? res.status : 'Kapcsolati hiba'}`);
+        }
+      } catch(err) {
+        showToast(`❌ Nem sikerült elérni a Piper AI szervert: ${baseUrl}`);
+        logApp("PIPER_TEST_FAIL", "Piper AI teszt sikertelen", err);
+      }
+    }
+
     function escapeXml(unsafe) {
       return (unsafe || '').replace(/[<>&'"]/g, function (c) {
         switch (c) {
@@ -2362,6 +2442,108 @@
       synth.speak(utter);
     }
 
+    async function playPiperTTS(textToSay, voiceCode, onEndedCallback, sessionToken) {
+      const voiceName = voiceCode.replace('piper-', ''); // pl. hu_HU-imre-medium
+      const baseUrl = (localStorage.getItem('ebook_piper_url') || 'http://localhost:5000').replace(/\/+$/, '');
+
+      // 0. Gyorsítótár ellenőrzése (0ms azonnali lejátszás)
+      const isCached = await checkAudioCacheAndPlay(textToSay, voiceCode, onEndedCallback, sessionToken);
+      if (isCached) return;
+
+      logApp("PIPER_TTS_REQ", `Piper AI Neurális TTS kérés #${sessionToken} (${voiceName}) -> ${baseUrl}`, {
+        text: textToSay.substring(0, 40),
+        length: textToSay.length
+      });
+
+      try {
+        let response = null;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 6500);
+
+        // 1. Megpróbáljuk a standard Piper REST / Wyoming / OpenAI kompatibilis végpontokat
+        try {
+          // A: OpenAI formátum /v1/audio/speech
+          response = await fetch(`${baseUrl}/v1/audio/speech`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model: voiceName, voice: voiceName, input: textToSay, speed: ttsRate }),
+            signal: controller.signal
+          });
+        } catch (e1) {
+          // B: Piper Web API /api/tts
+          try {
+            response = await fetch(`${baseUrl}/api/tts?text=${encodeURIComponent(textToSay)}&voice=${encodeURIComponent(voiceName)}`, {
+              method: 'GET',
+              signal: controller.signal
+            });
+          } catch(e2) {
+            // C: Piper /synthesize
+            response = await fetch(`${baseUrl}/synthesize`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ text: textToSay, voice: voiceName }),
+              signal: controller.signal
+            });
+          }
+        }
+
+        clearTimeout(timeoutId);
+
+        if (!response || !response.ok) {
+          throw new Error(`HTTP ${response ? response.status : 'Hiba'}`);
+        }
+
+        const blob = await response.blob();
+        if (sessionToken !== currentTTSSessionToken || !isSpeaking) return;
+
+        // Mentés az Intelligens 0ms gyorsítótárba
+        const cacheKey = getAudioCacheKey(textToSay, voiceCode);
+        dbPutAudioCache(cacheKey, blob, textToSay);
+
+        if (currentGTTSBlobUrl) {
+          URL.revokeObjectURL(currentGTTSBlobUrl);
+        }
+        currentGTTSBlobUrl = URL.createObjectURL(blob);
+
+        globalAudioPlayer.src = currentGTTSBlobUrl;
+        globalAudioPlayer.playbackRate = ttsRate;
+
+        let hasEnded = false;
+        const safeEnd = () => {
+          if (hasEnded || sessionToken !== currentTTSSessionToken) return;
+          hasEnded = true;
+          clearTimeout(playbackSafetyTimeout);
+          clearInterval(audioWatchdogInterval);
+          logApp("TTS_SUCCESS", `Sikeres Piper AI felolvasás: ${voiceName}`);
+          if (typeof onEndedCallback === 'function') onEndedCallback();
+        };
+
+        globalAudioPlayer.onended = safeEnd;
+        globalAudioPlayer.ontimeupdate = () => {
+          if (sessionToken !== currentTTSSessionToken || hasEnded) return;
+          const dur = globalAudioPlayer.duration;
+          const curr = globalAudioPlayer.currentTime;
+          if (dur > 0 && isFinite(dur) && curr >= dur - 0.1) {
+            safeEnd();
+          }
+        };
+
+        globalAudioPlayer.onerror = () => {
+          logApp("PIPER_PLAY_ERR", "Piper audio lejátszási hiba");
+          safeEnd();
+        };
+
+        await globalAudioPlayer.play();
+        logApp("TTS_PLAYING", `Piper AI Audio lejátszás elindult: ${voiceName}`);
+      } catch (err) {
+        logApp("PIPER_CONN_ERR", `Piper AI nem érhető el: ${baseUrl}`, err);
+        showToast(`⚠️ Piper AI (${baseUrl}) nem válaszol. Rendszerhang használata...`);
+        // Fallback a helyi rendszerhangra
+        const isMale = voiceName.includes('imre');
+        playNativeUtteranceWithVoice(textToSay, null, onEndedCallback, sessionToken, isMale ? 0.85 : 1.0);
+      }
+    }
+
     async function speakSentence(isJump = false) {
       if (!isSpeaking || currentSentenceIdx >= ttsSentences.length) {
         pauseTTS();
@@ -2402,7 +2584,16 @@
         }
       };
 
-      // 1. MICROSOFT AZURE & EDGE NEURAL TTS MOTOR (ELSŐDLEGES & ALAPÉRTELMEZETT)
+      // 1. PIPER AI NEURÁLIS TTS MOTOR (HELYI / RENDER)
+      if (selectedEdgeVoice.startsWith('piper-')) {
+        const isImre = selectedEdgeVoice.includes('imre');
+        const statElem = document.getElementById('tts-status');
+        if (statElem) statElem.innerText = `🤖 Piper AI (${isImre ? 'Imre Férfi' : 'Női'}): ${currentSentenceIdx + 1}/${ttsSentences.length}`;
+        playPiperTTS(item.text, selectedEdgeVoice, proceedToNext, currentTTSSessionToken);
+        return;
+      }
+
+      // 2. MICROSOFT AZURE & EDGE NEURAL TTS MOTOR (ELSŐDLEGES & ALAPÉRTELMEZETT)
       if (selectedEdgeVoice.startsWith('edge-')) {
         const isTamas = selectedEdgeVoice.includes('Tamas');
         const statElem = document.getElementById('tts-status');
@@ -2916,6 +3107,11 @@
       const inputReg = document.getElementById('input-azure-region');
       if (inputKey) inputKey.value = azKey;
       if (inputReg) inputReg.value = azReg;
+
+      // Piper AI Beállítások betöltése
+      const piperUrl = localStorage.getItem('ebook_piper_url') || 'http://localhost:5000';
+      const inputPiper = document.getElementById('input-piper-url');
+      if (inputPiper) inputPiper.value = piperUrl;
 
       // Naplózás kapcsolók szinkronizálása
       const chk1 = document.getElementById('chk-logging-toggle');
