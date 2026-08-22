@@ -1042,13 +1042,23 @@
         });
         select.appendChild(edgeGroup);
 
-        // 2. GOOGLE TRANSLATE TTS CSOPORT
+        // 2. GOOGLE TRANSLATE TTS CSOPORT (TÖBBNYELVŰ)
         const gGroup = document.createElement('optgroup');
-        gGroup.label = `🌐 Online Google Translate TTS`;
-        const optGtts = document.createElement('option');
-        optGtts.value = 'gtts-hu';
-        optGtts.innerText = '🌐 Google Translate TTS (gTTS Online - Tiszta magyar)';
-        gGroup.appendChild(optGtts);
+        gGroup.label = `🌐 Online Google Translate Hangok (Többnyelvű)`;
+        const gttsList = [
+          { id: 'gtts-hu', name: '🌐 🇭🇺 Google Translate (Magyar)' },
+          { id: 'gtts-en', name: '🌐 🇺🇸 Google Translate (Angol / English)' },
+          { id: 'gtts-de', name: '🌐 🇩🇪 Google Translate (Német / Deutsch)' },
+          { id: 'gtts-fr', name: '🌐 🇫🇷 Google Translate (Francia / Français)' },
+          { id: 'gtts-es', name: '🌐 🇪🇸 Google Translate (Spanyol / Español)' },
+          { id: 'gtts-it', name: '🌐 🇮🇹 Google Translate (Olasz / Italiano)' }
+        ];
+        gttsList.forEach(gt => {
+          const opt = document.createElement('option');
+          opt.value = gt.id;
+          opt.innerText = gt.name;
+          gGroup.appendChild(opt);
+        });
         select.appendChild(gGroup);
 
         // 3. MAGYAR RENDSZERHANGOK CSOPORT
@@ -2265,11 +2275,19 @@
       const sessionToken = currentTTSSessionToken;
       const voiceName = voiceCode.replace('edge-', '');
 
+      // Nyelvkód meghatározása a választott hangból
+      let langCode = 'hu';
+      if (voiceName.includes('en-US') || voiceName.includes('Jenny') || voiceName.includes('Guy')) langCode = 'en';
+      else if (voiceName.includes('de-DE') || voiceName.includes('Katja')) langCode = 'de';
+      else if (voiceName.includes('fr-FR')) langCode = 'fr';
+      else if (voiceName.includes('es-ES')) langCode = 'es';
+      else if (voiceName.includes('it-IT')) langCode = 'it';
+
       // 0. Gyorsítótár ellenőrzése (0ms azonnali lejátszás)
       const isCached = await checkAudioCacheAndPlay(textToSay, voiceCode, onEndedCallback, sessionToken);
       if (isCached) return;
 
-      logApp("EDGE_TTS_REQ", `Microsoft Edge / Azure Neural TTS kérés #${sessionToken} (${voiceName})`, {
+      logApp("EDGE_TTS_REQ", `Microsoft Edge / Azure Neural TTS kérés #${sessionToken} (${voiceName}, nyelv: ${langCode})`, {
         text: textToSay.substring(0, 40),
         length: textToSay.length
       });
@@ -2282,6 +2300,7 @@
         if (voiceName.includes('Tamas') && (n.includes('tamas') || n.includes('tamás'))) return true;
         if (voiceName.includes('Jenny') && n.includes('jenny')) return true;
         if (voiceName.includes('Guy') && n.includes('guy')) return true;
+        if (voiceName.includes('Katja') && n.includes('katja')) return true;
         return false;
       });
 
@@ -2299,9 +2318,19 @@
         if (success) return;
       }
 
-      // 3. Fallback online szintézisre
-      logApp("EDGE_STREAM_TRY", `Neural beszédmotor indítása: ${voiceName}`);
-      playGTTS(textToSay, onEndedCallback);
+      // 3. Ha az adott idegen nyelvhez van telepített natív rendszerhang (pl. Angol Jenny/Guy -> Samantha/Alex)
+      if (langCode !== 'hu') {
+        const matchingNativeVoice = allVoices.find(v => v.lang && v.lang.toLowerCase().startsWith(langCode));
+        if (matchingNativeVoice) {
+          logApp("EDGE_LANG_NATIVE", `Nyelvváltás natív rendszerhanggal (${langCode}): ${matchingNativeVoice.name}`);
+          playNativeUtteranceWithVoice(textToSay, matchingNativeVoice, onEndedCallback, sessionToken);
+          return;
+        }
+      }
+
+      // 4. Online szintézis a választott nyelvnek megfelelő beszédmotorral
+      logApp("EDGE_LANG_GTTS", `Online TTS nyelvi átadás (${langCode})`);
+      playGTTS(textToSay, onEndedCallback, langCode);
     }
 
     function playNativeUtteranceWithVoice(textToSay, voiceObj, onEndedCallback, sessionToken) {
@@ -2317,13 +2346,13 @@
         if (hasEnded) return;
         hasEnded = true;
         clearTimeout(window.speechWatchdog);
-        logApp("EDGE_NATIVE_DONE", `Microsoft Natural hang befejezve: ${voiceObj.name}`);
+        logApp("EDGE_NATIVE_DONE", `Natív hang befejezve: ${voiceObj.name}`);
         if (typeof onEndedCallback === 'function') onEndedCallback();
       };
 
       utter.onend = safeEnd;
       utter.onerror = (e) => {
-        logApp("EDGE_NATIVE_ERROR", `Microsoft Natural hiba: ${voiceObj.name}`, e);
+        logApp("EDGE_NATIVE_ERROR", `Natív hang hiba: ${voiceObj.name}`, e);
         safeEnd();
       };
 
@@ -2378,7 +2407,16 @@
         }
       };
 
-      // 1. MICROSOFT EDGE / AZURE NEURAL TTS MOTOR
+      // 1. ONLINE GOOGLE TRANSLATE NYELVI HANGOK (gtts-hu, gtts-en, gtts-de, gtts-fr, gtts-es, gtts-it)
+      if (selectedEdgeVoice.startsWith('gtts-')) {
+        const langCode = selectedEdgeVoice.replace('gtts-', '') || 'hu';
+        const statElem = document.getElementById('tts-status');
+        if (statElem) statElem.innerText = `🌐 Google TTS (${langCode.toUpperCase()}): ${currentSentenceIdx + 1}/${ttsSentences.length}`;
+        playGTTS(item.text, proceedToNext, langCode);
+        return;
+      }
+
+      // 2. MICROSOFT EDGE / AZURE NEURAL TTS MOTOR
       if (selectedEdgeVoice.startsWith('edge-')) {
         const statElem = document.getElementById('tts-status');
         if (statElem) statElem.innerText = `🌟 Edge Neural: ${currentSentenceIdx + 1}/${ttsSentences.length}`;
@@ -2386,19 +2424,11 @@
         return;
       }
 
-      // 2. GOOGLE TRANSLATE GTTS
-      if (selectedEdgeVoice === 'gtts-hu') {
-        const statElem = document.getElementById('tts-status');
-        if (statElem) statElem.innerText = `🌐 Google gTTS: ${currentSentenceIdx + 1}/${ttsSentences.length}`;
-        playGTTS(item.text, proceedToNext);
-        return;
-      }
-
       // 3. ELÉRHETŐ ESZKÖZ / RENDSZER NATÍV TTS HANGOK
-      const isSystemHungarian = (selectedEdgeVoice === 'system-hu' || selectedEdgeVoice.toLowerCase().includes('tunde') || selectedEdgeVoice.toLowerCase().includes('tünde'));
+      const isSystemHungarian = (selectedEdgeVoice === 'system-hu');
       const voiceObj = isSystemHungarian ? null : getSelectedNativeVoiceObj();
       const voiceName = isSystemHungarian ? "Tünde (Továbbfejlesztett rendszerhang)" : (voiceObj ? `${voiceObj.name} (${voiceObj.lang})` : "Rendszerhang");
-      logApp("TTS_NATIVE_START", `Natív hang felolvasás: ${voiceName}`, { isSystemHungarian, text: item.text.substring(0, 40) });
+      logApp("TTS_NATIVE_START", `Natív hang felolvasás: ${voiceName}`, { isSystemHungarian, voice: voiceObj?.name, lang: voiceObj?.lang, text: item.text.substring(0, 40) });
       const statElem = document.getElementById('tts-status');
       if (statElem) statElem.innerText = `📱 ${voiceName}: ${currentSentenceIdx + 1}/${ttsSentences.length}`;
 
@@ -2406,10 +2436,13 @@
         if (!isSpeaking) return;
 
         const utter = new SpeechSynthesisUtterance(item.text);
-        utter.lang = 'hu-HU';
-        if (voiceObj && !isSystemHungarian) {
+        if (isSystemHungarian) {
+          utter.lang = 'hu-HU';
+        } else if (voiceObj) {
           utter.voice = voiceObj;
           utter.lang = voiceObj.lang || 'hu-HU';
+        } else {
+          utter.lang = 'hu-HU';
         }
         utter.rate = ttsRate;
 
@@ -2445,27 +2478,27 @@
       }, 40);
     }
 
-    async function playGTTS(textToSay, onEndedCallback) {
+    async function playGTTS(textToSay, onEndedCallback, langCode = 'hu') {
       stopAudioPlayback();
       const sessionToken = ++currentTTSSessionToken;
 
       // 0. Gyorsítótár ellenőrzése (0ms azonnali lejátszás)
-      const isCached = await checkAudioCacheAndPlay(textToSay, 'gtts-hu', onEndedCallback, sessionToken);
+      const isCached = await checkAudioCacheAndPlay(textToSay, `gtts-${langCode}`, onEndedCallback, sessionToken);
       if (isCached) return;
 
-      logApp("TTS_REQ", `gTTS kérés #${sessionToken}`, { text: textToSay.substring(0, 40), length: textToSay.length });
+      logApp("TTS_REQ", `gTTS kérés #${sessionToken} (${langCode})`, { text: textToSay.substring(0, 40), length: textToSay.length });
 
       const encodedText = encodeURIComponent(textToSay);
       const sources = [
-        { name: "Google Translate (tw-ob)", url: `https://translate.google.com/translate_tts?ie=UTF-8&tl=hu&client=tw-ob&q=${encodedText}` },
-        { name: "Google Translate Mirror", url: `https://translate.google.com/translate_tts?ie=UTF-8&tl=hu&total=1&idx=0&client=tw-ob&q=${encodedText}` },
-        { name: "Google API (gtx)", url: `https://translate.googleapis.com/translate_tts?client=gtx&ie=UTF-8&tl=hu&q=${encodedText}` }
+        { name: `Google Translate (${langCode})`, url: `https://translate.google.com/translate_tts?ie=UTF-8&tl=${langCode}&client=tw-ob&q=${encodedText}` },
+        { name: `Google Translate Mirror (${langCode})`, url: `https://translate.google.com/translate_tts?ie=UTF-8&tl=${langCode}&total=1&idx=0&client=tw-ob&q=${encodedText}` },
+        { name: `Google API (${langCode})`, url: `https://translate.googleapis.com/translate_tts?client=gtx&ie=UTF-8&tl=${langCode}&q=${encodedText}` }
       ];
 
       // Következő mondat előtöltése a háttérben a hálózati késleltetés megszüntetésére
       if (currentSentenceIdx + 1 < ttsSentences.length) {
         const nextText = ttsSentences[currentSentenceIdx + 1].text;
-        const nextUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=hu&client=tw-ob&q=${encodeURIComponent(nextText)}`;
+        const nextUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=${langCode}&client=tw-ob&q=${encodeURIComponent(nextText)}`;
         try {
           preloadAudioPlayer.src = nextUrl;
           preloadAudioPlayer.preload = 'auto';
