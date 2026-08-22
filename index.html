@@ -523,6 +523,7 @@
     let notes = [];
     let lastSeenPIdx = 0;
     let pendingNoteQuote = "";
+    let currentDrawerTab = 'toc';
 
     let currentFontSize = 18;
     let currentLineHeight = 1.8;
@@ -871,7 +872,7 @@
       container.appendChild(fragment);
 
       prepareTTSData();
-      renderDrawerContent('toc');
+      renderDrawerContent(currentDrawerTab);
     }
 
     async function handleFileUpload(event) {
@@ -1302,7 +1303,7 @@
       saveReadingProgressToLocal();
 
       const drawer = document.getElementById('drawer');
-      if (!drawer.classList.contains('opacity-0')) {
+      if (!drawer.classList.contains('opacity-0') && currentDrawerTab === 'toc') {
         renderDrawerContent('toc');
       }
     }
@@ -1721,7 +1722,7 @@
       if (drawer.classList.contains('opacity-0')) {
         drawer.classList.remove('opacity-0', 'pointer-events-none');
         panel.classList.remove('-translate-x-full');
-        renderDrawerContent('toc');
+        switchTab(currentDrawerTab || 'toc');
       } else {
         drawer.classList.add('opacity-0', 'pointer-events-none');
         panel.classList.add('-translate-x-full');
@@ -1729,11 +1730,18 @@
     }
 
     function switchTab(tab) {
-      document.querySelectorAll('#drawer button').forEach(b => {
-        b.classList.remove('text-indigo-400', 'border-b-2', 'border-indigo-500');
-        b.classList.add('text-slate-400');
+      currentDrawerTab = tab;
+      const tabIds = ['toc', 'marks', 'notes', 'stats'];
+      tabIds.forEach(t => {
+        const btn = document.getElementById(`tab-${t}`);
+        if (btn) {
+          if (t === tab) {
+            btn.className = "flex-1 py-2 text-indigo-400 border-b-2 border-indigo-500 text-center font-semibold";
+          } else {
+            btn.className = "flex-1 py-2 text-slate-400 text-center font-semibold hover:text-slate-200 transition";
+          }
+        }
       });
-      document.getElementById(`tab-${tab}`).classList.add('text-indigo-400', 'border-b-2', 'border-indigo-500');
       renderDrawerContent(tab);
     }
 
