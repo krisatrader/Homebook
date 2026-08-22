@@ -245,10 +245,11 @@
         <button onclick="toggleDrawer()" class="text-slate-400 hover:text-white text-lg">✕</button>
       </div>
 
-      <div class="flex border-b border-slate-700 text-xs font-semibold">
-        <button onclick="switchTab('toc')" id="tab-toc" class="flex-1 py-2 text-indigo-400 border-b-2 border-indigo-500">Fejezetek</button>
-        <button onclick="switchTab('marks')" id="tab-marks" class="flex-1 py-2 text-slate-400">Könyvjelzők</button>
-        <button onclick="switchTab('stats')" id="tab-stats" class="flex-1 py-2 text-slate-400">Statisztika</button>
+      <div class="flex border-b border-slate-700 text-[11px] sm:text-xs font-semibold">
+        <button onclick="switchTab('toc')" id="tab-toc" class="flex-1 py-2 text-indigo-400 border-b-2 border-indigo-500 text-center">Fejezetek</button>
+        <button onclick="switchTab('marks')" id="tab-marks" class="flex-1 py-2 text-slate-400 text-center">Könyvjelzők</button>
+        <button onclick="switchTab('notes')" id="tab-notes" class="flex-1 py-2 text-slate-400 text-center">Jegyzetek</button>
+        <button onclick="switchTab('stats')" id="tab-stats" class="flex-1 py-2 text-slate-400 text-center">Statisztika</button>
       </div>
 
       <div class="flex-1 overflow-y-auto space-y-2 text-xs" id="drawer-content">
@@ -548,6 +549,25 @@
     let sleepTimerInterval = null;
     let sleepTimerSecondsRemaining = 0;
 
+    function saveMetadataToLocal() {
+      try {
+        localStorage.setItem('ebook_bookmarks', JSON.stringify(bookmarks));
+        localStorage.setItem('ebook_highlights', JSON.stringify(highlights));
+        localStorage.setItem('ebook_notes', JSON.stringify(notes));
+      } catch(e) {}
+    }
+
+    function loadStoredMetadata() {
+      try {
+        const bm = localStorage.getItem('ebook_bookmarks');
+        if (bm) bookmarks = JSON.parse(bm);
+        const hl = localStorage.getItem('ebook_highlights');
+        if (hl) highlights = JSON.parse(hl);
+        const nt = localStorage.getItem('ebook_notes');
+        if (nt) notes = JSON.parse(nt);
+      } catch(e) {}
+    }
+
     window.addEventListener('DOMContentLoaded', async () => {
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('./sw.js?v=3').then((reg) => {
@@ -564,6 +584,7 @@
           };
         }).catch(() => {});
       }
+      loadStoredMetadata();
       populateNativeVoices();
       loadStoredSettings();
       setupSelectionListener();
@@ -714,6 +735,7 @@
         if (data.bookmarks) bookmarks = data.bookmarks;
         if (data.highlights) highlights = data.highlights;
         if (data.notes) notes = data.notes;
+        saveMetadataToLocal();
 
         hideProgress();
         renderMyBookshelf('my-books');
@@ -815,43 +837,67 @@
       const files = Array.from(event.target.files);
       if (!files || files.length === 0) return;
 
-      showProgress("Könyv Betöltése", `${files.length} fájl feldolgozása...`, 30);
+      showProgress("Könyv Betöltése", `${files.length} fájl feldolgozása...`, 20);
 
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        const title = file.name.replace(/\.[^/.]+$/, "").replace(/\.kepub$/, "");
+        let title = file.name.replace(/\.[^/.]+$/, "").replace(/\.kepub$/, "");
 
         if (file.name.endsWith('.txt')) {
-          const text = await file.text();
-          const pList = text.split(/\n+/).map(p => p.trim()).filter(p => p.length > 0);
-          await addBookToLibrary(title, "Saját könyv", pList, [{ title: "Teljes Könyv", startP: 0, endP: pList.length - 1 }]);
+          try {
+            const text = await file.text();
+            const pList = text.split(/\n+/).map(p => p.trim()).filter(p => p.length > 0);
+            if (pList.length > 0) {
+              await addBookToLibrary(title, "Saját könyv", pList, [{ title: "Teljes Könyv", startP: 0, endP: pList.length - 1 }]);
+            }
+          } catch(txtErr) {
+            console.warn("TXT olvasási hiba:", txtErr);
+          }
         } 
         else if (file.name.endsWith('.epub') || file.name.endsWith('.kepub') || file.name.endsWith('.kepub.epub')) {
           try {
             const buffer = await file.arrayBuffer();
             const epubBook = ePub(buffer);
             await epubBook.ready;
+
+            try {
+              const meta = await epubBook.loaded.metadata;
+              if (meta && meta.title && meta.title.trim().length > 0) {
+                title = meta.title.trim();
+              }
+            } catch(mErr) {}
             
             let loadedParagraphs = [];
             let chapters = [];
+            const spineItems = (epubBook.spine && (epubBook.spine.spineItems || epubBook.spine.items)) || [];
 
-            for (const section of epubBook.spine.spineItems) {
-              const doc = await section.load(epubBook.load.bind(epubBook));
-              const elems = Array.from(doc.querySelectorAll('p, h1, h2, h3'))
-                .map(el => el.innerText.trim())
-                .filter(t => t.length > 10);
-              
-              if (elems.length > 0) {
-                const startP = loadedParagraphs.length;
-                loadedParagraphs.push(...elems);
-                const endP = loadedParagraphs.length - 1;
-                chapters.push({ title: elems[0].substring(0, 30) + '...', startP, endP });
+            for (const section of spineItems) {
+              try {
+                const doc = await section.load(epubBook.load.bind(epubBook));
+                if (!doc) continue;
+                const elems = Array.from(doc.querySelectorAll('p, h1, h2, h3, h4, div'))
+                  .map(el => el.innerText ? el.innerText.trim() : '')
+                  .filter(t => t.length > 10);
+                
+                if (elems.length > 0) {
+                  const startP = loadedParagraphs.length;
+                  loadedParagraphs.push(...elems);
+                  const endP = loadedParagraphs.length - 1;
+                  chapters.push({ title: elems[0].substring(0, 35) + '...', startP, endP });
+                }
+              } catch(secErr) {
+                console.warn("EPUB fejezet betöltési hiba:", secErr);
               }
             }
             
-            await addBookToLibrary(title, "Saját könyv", loadedParagraphs, chapters);
+            if (loadedParagraphs.length > 0) {
+              await addBookToLibrary(title, "Saját könyv", loadedParagraphs, chapters);
+            } else {
+              showToast("Az EPUB fájlból nem sikerült szöveges bekezdést kinyerni.");
+            }
           } catch (err) {
             console.warn("EPUB hiba:", err);
+            showToast("Hiba az EPUB fájl feldolgozása során.");
           }
         }
         else if (file.name.endsWith('.pdf')) {
@@ -864,21 +910,30 @@
             let chapters = [];
 
             for (let pNo = 1; pNo <= pdf.numPages; pNo++) {
-              const page = await pdf.getPage(pNo);
-              const textContent = await page.getTextContent();
-              const pageText = textContent.items.map(item => item.str).join(' ');
-              
-              if (pageText.trim().length > 0) {
-                const startP = loadedParagraphs.length;
-                loadedParagraphs.push(pageText);
-                const endP = loadedParagraphs.length - 1;
-                chapters.push({ title: `${pNo}. Oldal`, startP, endP });
+              try {
+                const page = await pdf.getPage(pNo);
+                const textContent = await page.getTextContent();
+                const pageText = textContent.items.map(item => item.str).join(' ').trim();
+                
+                if (pageText.length > 0) {
+                  const startP = loadedParagraphs.length;
+                  loadedParagraphs.push(pageText);
+                  const endP = loadedParagraphs.length - 1;
+                  chapters.push({ title: `${pNo}. Oldal`, startP, endP });
+                }
+              } catch(pErr) {
+                console.warn("PDF oldal hiba:", pErr);
               }
             }
 
-            await addBookToLibrary(title, "Saját könyv", loadedParagraphs, chapters);
+            if (loadedParagraphs.length > 0) {
+              await addBookToLibrary(title, "Saját könyv", loadedParagraphs, chapters);
+            } else {
+              showToast("A PDF dokumentumból nem sikerült szöveget olvasni.");
+            }
           } catch (err) {
             console.warn("PDF hiba:", err);
+            showToast("Hiba a PDF fájl feldolgozásakor.");
           }
         }
       }
@@ -888,7 +943,7 @@
       
       const modal = document.getElementById('library-modal');
       modal.classList.remove('opacity-0', 'pointer-events-none');
-      showToast("Könyv elmentve a Könyvespolcra!");
+      showToast("Könyv hozzáadva a Könyvtárhoz!");
     }
 
     async function addBookToLibrary(title, author, paragraphs, chapters, isTranslated = false) {
@@ -1062,15 +1117,25 @@
       document.addEventListener('selectionchange', () => {
         const selection = window.getSelection();
         const popover = document.getElementById('selection-popover');
+        if (!popover) return;
 
-        if (selection && selection.toString().trim().length > 0) {
-          const range = selection.getRangeAt(0);
-          const rect = range.getBoundingClientRect();
-          const containerRect = document.getElementById('reader-container').getBoundingClientRect();
+        if (selection && selection.rangeCount > 0 && selection.toString().trim().length > 0) {
+          try {
+            const range = selection.getRangeAt(0);
+            const rect = range.getBoundingClientRect();
+            const container = document.getElementById('reader-container');
+            if (!container) return;
+            const containerRect = container.getBoundingClientRect();
 
-          popover.style.top = `${rect.top - containerRect.top - 45}px`;
-          popover.style.left = `${Math.max(10, rect.left - containerRect.left)}px`;
-          popover.classList.remove('hidden');
+            const top = rect.top - containerRect.top + container.scrollTop - 48;
+            const left = Math.max(10, Math.min(container.clientWidth - 260, rect.left - containerRect.left + container.scrollLeft));
+
+            popover.style.top = `${Math.max(10, top)}px`;
+            popover.style.left = `${left}px`;
+            popover.classList.remove('hidden');
+          } catch(e) {
+            popover.classList.add('hidden');
+          }
         } else {
           popover.classList.add('hidden');
         }
@@ -1105,13 +1170,14 @@
 
     function applyHighlight(color) {
       const selection = window.getSelection();
-      if (!selection.anchorNode) return;
+      if (!selection || !selection.anchorNode) return;
 
-      const pElem = selection.anchorNode.parentElement.closest('p');
+      const pElem = selection.anchorNode.parentElement?.closest('p');
       if (pElem) {
         const pIdx = parseInt(pElem.id.replace('para-', ''));
         highlights = highlights.filter(h => h.pIdx !== pIdx);
         highlights.push({ pIdx, color });
+        saveMetadataToLocal();
         renderBook();
         showToast("Kiemelés elmentve.");
       }
@@ -1134,21 +1200,31 @@
       if (save) {
         const noteText = document.getElementById('note-text-input').value.trim();
         if (noteText) {
-          notes.push({ text: noteText, quote: pendingNoteQuote });
+          notes.push({ text: noteText, quote: pendingNoteQuote, date: new Date().toISOString() });
+          saveMetadataToLocal();
           showToast("Jegyzet elmentve!");
         }
       }
       pendingNoteQuote = "";
     }
 
+    function deleteNote(idx) {
+      notes.splice(idx, 1);
+      saveMetadataToLocal();
+      renderDrawerContent('notes');
+      showToast("Jegyzet törölve.");
+    }
+
     function addBookmark() {
       const title = `Könyvjelző (${lastSeenPIdx + 1}. bekezdés)`;
       bookmarks.push({ title, pIdx: lastSeenPIdx, id: Date.now() });
+      saveMetadataToLocal();
       showToast("Könyvjelző hozzáadva!");
     }
 
     function deleteBookmark(idx) {
       bookmarks.splice(idx, 1);
+      saveMetadataToLocal();
       renderDrawerContent('marks');
       showToast("Könyvjelző törölve.");
     }
@@ -1570,7 +1646,11 @@
       const pElem = document.getElementById(`para-${item.pIdx}`);
       if (pElem) {
         pElem.classList.add('tts-active');
+        isProgrammaticScroll = true;
         pElem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setTimeout(() => {
+          isProgrammaticScroll = false;
+        }, 300);
       }
     }
 
@@ -1647,15 +1727,33 @@
       } 
       else if (tab === 'marks') {
         if (bookmarks.length === 0) {
-          content.innerText = "Még nincs könyvjelződ.";
+          content.innerHTML = '<p class="text-xs text-slate-400 text-center py-4">Még nincs könyvjelződ.</p>';
           return;
         }
         bookmarks.forEach((bm, idx) => {
           const item = document.createElement('div');
-          item.className = "p-2 bg-slate-900/60 hover:bg-slate-700/60 rounded-xl cursor-pointer text-indigo-300 flex items-center justify-between border border-slate-700/50";
+          item.className = "p-2.5 bg-slate-900/60 hover:bg-slate-700/60 rounded-xl cursor-pointer text-indigo-300 flex items-center justify-between border border-slate-700/50";
           item.innerHTML = `
-            <span onclick="scrollToParagraph(${bm.pIdx}, true, true); toggleDrawer();" class="truncate flex-1">${bm.title}</span>
+            <span onclick="scrollToParagraph(${bm.pIdx}, true, true); toggleDrawer();" class="truncate flex-1 font-medium text-xs">${bm.title}</span>
             <button onclick="deleteBookmark(${idx})" class="p-1 hover:bg-rose-500/20 text-rose-400 rounded-lg text-xs shrink-0">🗑️</button>
+          `;
+          content.appendChild(item);
+        });
+      }
+      else if (tab === 'notes') {
+        if (notes.length === 0) {
+          content.innerHTML = '<p class="text-xs text-slate-400 text-center py-4">Még nincs jegyzeted. Jelölj ki szöveget az olvasóban jegyzet készítéséhez!</p>';
+          return;
+        }
+        notes.forEach((nt, idx) => {
+          const item = document.createElement('div');
+          item.className = "p-3 bg-slate-900/80 rounded-xl border border-slate-700/60 space-y-1.5 shadow-sm";
+          item.innerHTML = `
+            ${nt.quote ? `<div class="text-[11px] text-indigo-300 italic font-serif line-clamp-2 border-l-2 border-indigo-500 pl-2">"${nt.quote}"</div>` : ''}
+            <div class="text-xs text-slate-100 font-medium whitespace-pre-wrap">${nt.text}</div>
+            <div class="flex justify-end pt-1">
+              <button onclick="deleteNote(${idx})" class="text-rose-400 hover:bg-rose-500/20 px-2 py-0.5 rounded text-[11px] font-semibold">🗑️ Törlés</button>
+            </div>
           `;
           content.appendChild(item);
         });
