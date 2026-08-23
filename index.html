@@ -937,26 +937,14 @@
     let currentSentenceIdx = 0;
     let ttsRate = parseFloat(localStorage.getItem('ebook_tts_rate') || '1.0');
     
-    // A/B DUPLA LEJÁTSZÓ PUFFER (PING-PONG DOUBLE BUFFERING)
-    let playerA = new Audio();
-    playerA.playsInline = true;
-    playerA.setAttribute('playsinline', '');
-    playerA.setAttribute('webkit-playsinline', '');
-    playerA.preload = 'auto';
+    // EGYSÉGESÍTETT, ULTRA-STABIL SAFARI AUDIO LEJÁTSZÓ
+    let mainAudioPlayer = new Audio();
+    mainAudioPlayer.playsInline = true;
+    mainAudioPlayer.setAttribute('playsinline', '');
+    mainAudioPlayer.setAttribute('webkit-playsinline', '');
+    mainAudioPlayer.preload = 'auto';
 
-    let playerB = new Audio();
-    playerB.playsInline = true;
-    playerB.setAttribute('playsinline', '');
-    playerB.setAttribute('webkit-playsinline', '');
-    playerB.preload = 'auto';
-
-    let activePlayer = playerA;
-    let standbyPlayer = playerB;
-    let activePlayerId = 'A';
     let currentAudioBlobUrl = null;
-    let standbySentenceIdx = -1;
-    let standbyBlobUrl = null;
-    let audioWatchdogInterval = null;
     let currentTTSSessionToken = 0;
     let playbackSafetyTimeout = null;
     let scrollThrottleTimeout = null;
@@ -1343,8 +1331,10 @@
               document.getElementById('btn-play-pause').innerText = '⏸';
               // Szinkron Safari Audio csatorna feloldás a felhasználói kattintásban
               const silentAudio = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
-              if (playerA) { playerA.src = silentAudio; playerA.play().catch(() => {}); }
-              if (playerB) { playerB.src = silentAudio; playerB.play().catch(() => {}); }
+              if (mainAudioPlayer) {
+                mainAudioPlayer.src = silentAudio;
+                mainAudioPlayer.play().catch(() => {});
+              }
             }
             speakSentence(true);
           }
@@ -2243,13 +2233,9 @@
 
       // Szinkron Safari Audio csatorna feloldás a felhasználói érintési eseményben
       const silentAudio = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
-      if (playerA) {
-        playerA.src = silentAudio;
-        playerA.play().catch(() => {});
-      }
-      if (playerB) {
-        playerB.src = silentAudio;
-        playerB.play().catch(() => {});
+      if (mainAudioPlayer) {
+        mainAudioPlayer.src = silentAudio;
+        mainAudioPlayer.play().catch(() => {});
       }
 
       speakSentence(true);
@@ -2275,41 +2261,14 @@
     }
 
     function stopAudioPlayback() {
-      // Teljes leállítás (TTS megszakítás / hang váltás esetén)
       clearTimeout(playbackSafetyTimeout);
-      clearInterval(audioWatchdogInterval);
-      if (playerA) {
-        playerA.pause();
-        playerA.onended = null;
-        playerA.onerror = null;
-        playerA.ontimeupdate = null;
-      }
-      if (playerB) {
-        playerB.pause();
-        playerB.onended = null;
-        playerB.onerror = null;
-        playerB.ontimeupdate = null;
-      }
-      if (currentAudioBlobUrl) {
-        URL.revokeObjectURL(currentAudioBlobUrl);
-        currentAudioBlobUrl = null;
-      }
-      if (standbyBlobUrl) {
-        URL.revokeObjectURL(standbyBlobUrl);
-        standbyBlobUrl = null;
-      }
-      standbySentenceIdx = -1;
-    }
-
-    function softStopActivePlayer() {
-      // Csak az aktív lejátszó eseménykezelőit szünteti meg, a standby puffer érintetlen marad
-      clearTimeout(playbackSafetyTimeout);
-      clearInterval(audioWatchdogInterval);
-      if (activePlayer) {
-        activePlayer.pause();
-        activePlayer.onended = null;
-        activePlayer.onerror = null;
-        activePlayer.ontimeupdate = null;
+      if (mainAudioPlayer) {
+        mainAudioPlayer.pause();
+        mainAudioPlayer.onended = null;
+        mainAudioPlayer.onerror = null;
+        mainAudioPlayer.ontimeupdate = null;
+        mainAudioPlayer.onplaying = null;
+        mainAudioPlayer.onloadedmetadata = null;
       }
       if (currentAudioBlobUrl) {
         URL.revokeObjectURL(currentAudioBlobUrl);
@@ -2448,32 +2407,10 @@
       if (!sessionToken) sessionToken = currentTTSSessionToken;
       const voiceName = voiceCode.replace('edge-', '');
 
-      // 1. A/B DUPLA LEJÁTSZÓS PING-PONG ÁTADÁS (0ms azonnali megszólalás)
-      if (standbySentenceIdx === currentSentenceIdx && standbyBlobUrl) {
-        const oldActive = activePlayer;
-        activePlayer = standbyPlayer;
-        standbyPlayer = oldActive;
-        activePlayerId = (activePlayerId === 'A') ? 'B' : 'A';
-
-        if (currentAudioBlobUrl) {
-          URL.revokeObjectURL(currentAudioBlobUrl);
-        }
-        currentAudioBlobUrl = standbyBlobUrl;
-        standbyBlobUrl = null;
-        standbySentenceIdx = -1;
-
-        logApp("DOUBLE_BUFFER_HIT", `⚡ 0ms Ping-Pong átadás -> Player ${activePlayerId} indult mondat #${currentSentenceIdx + 1}`);
-
-        setupPlayerEventsAndPlay(activePlayer, onEndedCallback, sessionToken, voiceName, textToSay);
-        prepareStandbyAudio(currentSentenceIdx + 1, voiceCode);
-        return;
-      }
-
-      // 2. Ha nincs standby-ban, koordinált letöltés / gyorsítótár lekérés
       const statElem = document.getElementById('tts-status');
       if (statElem && isSpeaking) {
         const isTamas = voiceName.includes('Tamas');
-        statElem.innerText = `⏳ Töltés... #${currentSentenceIdx + 1}/${ttsSentences.length}`;
+        statElem.innerText = `🌟 ${isTamas ? 'Tamás (Férfi)' : 'Noémi (Női)'}: #${currentSentenceIdx + 1}/${ttsSentences.length}`;
       }
 
       const blob = await getOrFetchAudioBlob(textToSay, voiceCode);
@@ -2485,13 +2422,12 @@
           URL.revokeObjectURL(currentAudioBlobUrl);
         }
         currentAudioBlobUrl = URL.createObjectURL(blob);
-        activePlayer.src = currentAudioBlobUrl;
-        setupPlayerEventsAndPlay(activePlayer, onEndedCallback, sessionToken, voiceName, textToSay);
-        prepareStandbyAudio(currentSentenceIdx + 1, voiceCode);
+        mainAudioPlayer.src = currentAudioBlobUrl;
+        setupPlayerEventsAndPlay(mainAudioPlayer, onEndedCallback, sessionToken, voiceName, textToSay);
         return;
       }
 
-      // 3. Fallback helyi rendszerhangra ha semmi sem érkezett vissza
+      // Fallback helyi rendszerhangra ha hálózati hiba történne
       const isMaleVoice = voiceName.includes('Tamas') || voiceName.includes('Guy');
       logApp("EDGE_SYNTH_FALLBACK", `Safari/Helyi hang szintézis: ${voiceName}`);
       const voiceElem = document.getElementById('bottom-voice-name');
@@ -2508,7 +2444,6 @@
         if (hasEnded || sessionToken !== currentTTSSessionToken) return;
         hasEnded = true;
         clearTimeout(playbackSafetyTimeout);
-        clearInterval(audioWatchdogInterval);
         logApp("TTS_SUCCESS", `Sikeres Microsoft Edge-TTS lejátszás: ${voiceName}`);
         if (typeof onEndedCallback === 'function') onEndedCallback();
       };
@@ -2545,7 +2480,7 @@
         if (sessionToken !== currentTTSSessionToken || hasEnded || !hasStartedPlaying) return;
         const dur = player.duration;
         const curr = player.currentTime;
-        if (dur > 0.3 && isFinite(dur) && curr > 0.1 && (curr >= dur - 0.10 || player.ended)) {
+        if (dur > 0.3 && isFinite(dur) && curr > 0.1 && (curr >= dur - 0.08 || player.ended)) {
           safeEnd();
         }
       };
@@ -2574,7 +2509,10 @@
           if (err && (err.name === 'AbortError' || err.code === 20)) {
             return;
           }
-          logApp("PLAY_PROMISE_ERR", "Lejátszás hiba, fallback rendszerhangra", err);
+          logApp("PLAY_PROMISE_ERR", "Lejátszás hiba, fallback rendszerhangra", {
+            name: err ? err.name : '',
+            message: err ? err.message : ''
+          });
           if (textToSay) {
             const isMaleVoice = voiceName.includes('Tamas') || voiceName.includes('Guy');
             playNativeUtteranceWithVoice(textToSay, null, onEndedCallback, sessionToken, isMaleVoice ? 0.85 : 1.0);
@@ -2582,36 +2520,7 @@
         });
       }
 
-      logApp("TTS_PLAYING", `Microsoft Edge-TTS lejátszás elindult: ${voiceName} (Player ${activePlayerId})`);
-    }
-
-    async function prepareStandbyAudio(nextSentenceIdx, voiceCode) {
-      if (!isSpeaking || !ttsSentences || nextSentenceIdx >= ttsSentences.length) return;
-      if (!voiceCode.startsWith('edge-')) return;
-
-      const sentenceItem = ttsSentences[nextSentenceIdx];
-      if (!sentenceItem || !sentenceItem.text) return;
-
-      const textToPreload = sentenceItem.text;
-
-      try {
-        const blob = await getOrFetchAudioBlob(textToPreload, voiceCode);
-
-        if (blob && blob.size > 100 && isSpeaking) {
-          if (standbyBlobUrl) {
-            URL.revokeObjectURL(standbyBlobUrl);
-          }
-          standbyBlobUrl = URL.createObjectURL(blob);
-          standbySentenceIdx = nextSentenceIdx;
-          standbyPlayer.src = standbyBlobUrl;
-          standbyPlayer.playbackRate = ttsRate;
-          try { standbyPlayer.currentTime = 0; } catch(e) {}
-          standbyPlayer.load();
-          logApp("STANDBY_READY", `⚡ Standby Player (${activePlayerId === 'A' ? 'B' : 'A'}) előkészítve mondat #${nextSentenceIdx + 1}`);
-        }
-      } catch(err) {
-        logApp("STANDBY_PREP_ERR", "Standby előkészítési hiba", err);
-      }
+      logApp("TTS_PLAYING", `Microsoft Edge-TTS lejátszás elindult: ${voiceName}`);
     }
 
     function playNativeUtteranceWithVoice(textToSay, voiceObj, onEndedCallback, sessionToken, customPitch = 1.0) {
@@ -2698,7 +2607,6 @@
       const proceedToNext = () => {
         if (sessionToken !== currentTTSSessionToken) return;
         clearTimeout(playbackSafetyTimeout);
-        clearInterval(audioWatchdogInterval);
         clearTimeout(window.speechWatchdog);
         window.activeUtterance = null;
 
@@ -2718,30 +2626,7 @@
 
       // 1. MICROSOFT AZURE & EDGE NEURAL TTS MOTOR (ELSŐDLEGES & ALAPÉRTELMEZETT)
       if (selectedEdgeVoice.startsWith('edge-')) {
-        if (isJump) {
-          // Manuális ugrás: Standby puffer ürítése (mivel az elavult pozícióra mutat), események leválasztása
-          if (standbyBlobUrl) {
-            URL.revokeObjectURL(standbyBlobUrl);
-            standbyBlobUrl = null;
-          }
-          standbySentenceIdx = -1;
-          clearTimeout(playbackSafetyTimeout);
-          clearInterval(audioWatchdogInterval);
-          if (activePlayer) {
-            activePlayer.onended = null;
-            activePlayer.onerror = null;
-            activePlayer.ontimeupdate = null;
-          }
-          if (standbyPlayer) {
-            standbyPlayer.pause();
-            standbyPlayer.onended = null;
-            standbyPlayer.onerror = null;
-            standbyPlayer.ontimeupdate = null;
-          }
-        } else {
-          // Normál szekvenciális léptetés: csak az aktív lejátszó eseményeit töröljük, standby puffer megmarad
-          softStopActivePlayer();
-        }
+        stopAudioPlayback();
         synth.cancel();
         const isTamas = selectedEdgeVoice.includes('Tamas');
         const statElem = document.getElementById('tts-status');
