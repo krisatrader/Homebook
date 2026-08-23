@@ -786,10 +786,16 @@
           const req = store.get(cacheKey);
           req.onsuccess = () => {
             const record = req.result;
-            if (record && record.blob) {
+            if (record && record.data) {
               record.lastAccessed = Date.now();
               store.put(record);
-              resolve(record.blob);
+              const blob = new Blob([record.data], { type: 'audio/mpeg' });
+              resolve(blob);
+            } else if (record && record.blob) {
+              record.lastAccessed = Date.now();
+              store.put(record);
+              const blob = new Blob([record.blob], { type: 'audio/mpeg' });
+              resolve(blob);
             } else {
               resolve(null);
             }
@@ -801,21 +807,42 @@
       }
     }
 
-    async function dbPutAudioCache(cacheKey, blob, text) {
+    async function dbPutAudioCache(cacheKey, arrayBufferOrBlob, text) {
       try {
         const db = await openLocalDB();
         if (!db.objectStoreNames.contains('audio_cache')) return;
+        
+        let data = arrayBufferOrBlob;
+        let size = 0;
+        if (arrayBufferOrBlob instanceof Blob) {
+          size = arrayBufferOrBlob.size;
+          data = await arrayBufferOrBlob.arrayBuffer();
+        } else if (arrayBufferOrBlob && arrayBufferOrBlob.byteLength !== undefined) {
+          size = arrayBufferOrBlob.byteLength;
+        }
+
+        if (size < 200) return; // Nem tárolunk hibás / üres választ!
+
         const tx = db.transaction('audio_cache', 'readwrite');
         const store = tx.objectStore('audio_cache');
         store.put({
           cacheKey,
-          blob,
+          data,
           text: (text || '').substring(0, 80),
-          size: blob.size || 0,
+          size: size,
           timestamp: Date.now(),
           lastAccessed: Date.now()
         });
         dbPruneAudioCache();
+      } catch(e) {}
+    }
+
+    async function dbDeleteAudioCache(cacheKey) {
+      try {
+        const db = await openLocalDB();
+        if (!db.objectStoreNames.contains('audio_cache')) return;
+        const tx = db.transaction('audio_cache', 'readwrite');
+        tx.objectStore('audio_cache').delete(cacheKey);
       } catch(e) {}
     }
 
@@ -977,7 +1004,7 @@
 
     window.addEventListener('DOMContentLoaded', async () => {
       if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('./sw.js?v=5').then((reg) => {
+        navigator.serviceWorker.register('./sw.js?v=6').then((reg) => {
           reg.update().catch(() => {});
           reg.onupdatefound = () => {
             const installingWorker = reg.installing;
@@ -2391,9 +2418,10 @@
       }
     }
 
-    async function playEdgeNeuralTTS(textToSay, voiceCode, onEndedCallback, sessionToken) {
+    async function playEdgeNeuralTTS(textToSay, voiceCode, onEndedCallback, sessionToken, isRetry = false) {
       if (!sessionToken) sessionToken = currentTTSSessionToken;
       const voiceName = voiceCode.replace('edge-', '');
+      const cacheKey = getAudioCacheKey(textToSay, voiceCode);
 
       const statElem = document.getElementById('tts-status');
       if (statElem && isSpeaking) {
@@ -2405,13 +2433,29 @@
 
       if (sessionToken !== currentTTSSessionToken || !isSpeaking) return;
 
-      if (blob && blob.size > 100) {
+      if (blob && blob.size > 200) {
         const audioBlob = (blob.type === 'audio/mpeg') ? blob : new Blob([blob], { type: 'audio/mpeg' });
         const oldBlobUrl = currentAudioBlobUrl;
         currentAudioBlobUrl = URL.createObjectURL(audioBlob);
         mainAudioPlayer.src = currentAudioBlobUrl;
         mainAudioPlayer.load();
-        setupPlayerEventsAndPlay(mainAudioPlayer, onEndedCallback, sessionToken, voiceName, textToSay);
+
+        const handlePlaybackFailure = async () => {
+          if (sessionToken !== currentTTSSessionToken || !isSpeaking) return;
+          if (!isRetry) {
+            logApp("CACHE_AUTO_REPAIR", `Gyorsítótár bejegyzés javítása és friss letöltés: ${voiceName}`);
+            await dbDeleteAudioCache(cacheKey);
+            playEdgeNeuralTTS(textToSay, voiceCode, onEndedCallback, sessionToken, true);
+          } else {
+            const isMaleVoice = voiceName.includes('Tamas') || voiceName.includes('Guy');
+            logApp("EDGE_SYNTH_FALLBACK", `Safari/Helyi hang szintézis: ${voiceName}`);
+            const voiceElem = document.getElementById('bottom-voice-name');
+            if (voiceElem) voiceElem.innerText = '📱 Tünde (Rendszer)';
+            playNativeUtteranceWithVoice(textToSay, null, onEndedCallback, sessionToken, isMaleVoice ? 0.85 : 1.0);
+          }
+        };
+
+        setupPlayerEventsAndPlay(mainAudioPlayer, onEndedCallback, sessionToken, voiceName, textToSay, handlePlaybackFailure);
         if (oldBlobUrl) {
           setTimeout(() => {
             try { URL.revokeObjectURL(oldBlobUrl); } catch(e) {}
@@ -2428,7 +2472,7 @@
       playNativeUtteranceWithVoice(textToSay, null, onEndedCallback, sessionToken, isMaleVoice ? 0.85 : 1.0);
     }
 
-    function setupPlayerEventsAndPlay(player, onEndedCallback, sessionToken, voiceName, textToSay = '') {
+    function setupPlayerEventsAndPlay(player, onEndedCallback, sessionToken, voiceName, textToSay = '', onFailureCallback = null) {
       player.playbackRate = ttsRate;
       let hasEnded = false;
       let hasStartedPlaying = false;
@@ -2481,9 +2525,8 @@
       player.onerror = (e) => {
         if (sessionToken !== currentTTSSessionToken) return;
         logApp("EDGE_PLAY_ERR", "Edge-TTS audio hiba", e);
-        if (textToSay && !hasStartedPlaying) {
-          const isMaleVoice = voiceName.includes('Tamas') || voiceName.includes('Guy');
-          playNativeUtteranceWithVoice(textToSay, null, onEndedCallback, sessionToken, isMaleVoice ? 0.85 : 1.0);
+        if (!hasStartedPlaying && typeof onFailureCallback === 'function') {
+          onFailureCallback();
         }
       };
 
@@ -2502,9 +2545,8 @@
             name: err ? err.name : '',
             message: err ? err.message : ''
           });
-          if (textToSay && !hasStartedPlaying) {
-            const isMaleVoice = voiceName.includes('Tamas') || voiceName.includes('Guy');
-            playNativeUtteranceWithVoice(textToSay, null, onEndedCallback, sessionToken, isMaleVoice ? 0.85 : 1.0);
+          if (!hasStartedPlaying && typeof onFailureCallback === 'function') {
+            onFailureCallback();
           }
         });
       }
