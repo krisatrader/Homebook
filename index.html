@@ -989,7 +989,7 @@
 
     window.addEventListener('DOMContentLoaded', async () => {
       if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('./sw.js?v=3').then((reg) => {
+        navigator.serviceWorker.register('./sw.js?v=5').then((reg) => {
           reg.update().catch(() => {});
           reg.onupdatefound = () => {
             const installingWorker = reg.installing;
@@ -1282,6 +1282,7 @@
     }
 
     function loadBookFromLibrary(bookId) {
+      pauseTTS();
       saveReadingProgressToLocal();
       const found = myLibrary.find(b => b.id === bookId);
       if (found) {
@@ -1804,11 +1805,25 @@
         const rect = p.getBoundingClientRect();
         if (rect.top >= 0 && rect.top <= window.innerHeight / 2) {
           lastSeenPIdx = idx;
-          book.lastSeenPIdx = idx;
-          if (rounded >= 95) book.status = 'olvasott';
-          else if (rounded > 0) book.status = 'folyamatban';
+          if (book) {
+            book.lastSeenPIdx = idx;
+            if (rounded >= 95) book.status = 'olvasott';
+            else if (rounded > 0) book.status = 'folyamatban';
+          }
         }
       });
+
+      // Ha nincs aktív felolvasás, a kézi görgetés szinkronizálja a mondatmutatót is
+      if (!isSpeaking && ttsSentences && ttsSentences.length > 0) {
+        const sIdx = ttsSentences.findIndex(s => s.pIdx >= lastSeenPIdx);
+        if (sIdx !== -1) {
+          currentSentenceIdx = sIdx;
+          const currSent = document.getElementById('tts-current-sentence');
+          if (currSent && ttsSentences[currentSentenceIdx]) {
+            currSent.innerText = ttsSentences[currentSentenceIdx].text;
+          }
+        }
+      }
 
       updateChapterProgressDisplay();
       saveReadingProgressToLocal();
@@ -1935,18 +1950,22 @@
     }
 
     function syncTTSToParagraph(targetPIdx) {
-      const sentenceIdx = ttsSentences.findIndex(s => s.pIdx >= targetPIdx);
-      if (sentenceIdx !== -1) {
+      if (!ttsSentences || ttsSentences.length === 0) return;
+      let sentenceIdx = ttsSentences.findIndex(s => s.pIdx >= targetPIdx);
+      if (sentenceIdx === -1) {
+        sentenceIdx = ttsSentences.length - 1;
+      }
+      if (sentenceIdx >= 0 && sentenceIdx < ttsSentences.length) {
         currentSentenceIdx = sentenceIdx;
         const item = ttsSentences[currentSentenceIdx];
 
         const currSent = document.getElementById('tts-current-sentence');
-        if (currSent) currSent.innerText = item.text;
+        if (currSent && item) currSent.innerText = item.text;
 
         if (isSpeaking) {
           speakSentence(true);
-        } else {
-          highlightTTSSentence(item);
+        } else if (item) {
+          highlightTTSSentence(item, false);
         }
       }
     }
@@ -2156,7 +2175,10 @@
     }
 
     function startTTS() {
-      if (ttsSentences.length === 0) return;
+      if (!ttsSentences || ttsSentences.length === 0) return;
+      if (currentSentenceIdx < 0 || currentSentenceIdx >= ttsSentences.length) {
+        currentSentenceIdx = 0;
+      }
       isSpeaking = true;
       document.getElementById('btn-play-pause').innerText = '⏸';
       logApp("TTS_START", `Felolvasás elindítva mondat #${currentSentenceIdx + 1}/${ttsSentences.length}`, {
@@ -2170,6 +2192,7 @@
     function pauseTTS() {
       const wasSpeaking = isSpeaking;
       isSpeaking = false;
+      currentTTSSessionToken++;
       clearTimeout(playbackSafetyTimeout);
       clearTimeout(window.speechWatchdog);
       stopAudioPlayback();
@@ -2305,7 +2328,7 @@
         }
         currentAudioBlobUrl = URL.createObjectURL(blob);
         activePlayer.src = currentAudioBlobUrl;
-        setupPlayerEventsAndPlay(activePlayer, onEndedCallback, sessionToken, voiceName);
+        setupPlayerEventsAndPlay(activePlayer, onEndedCallback, sessionToken, voiceName, textToSay);
         prepareStandbyAudio(currentSentenceIdx + 1, `edge-${voiceName}`);
         return true;
       } catch (err) {
@@ -2799,16 +2822,19 @@
       }, 40);
     }
 
-    function highlightTTSSentence(item) {
+    function highlightTTSSentence(item, autoScroll = true) {
       removeActiveHighlights();
+      if (!item) return;
       const pElem = document.getElementById(`para-${item.pIdx}`);
       if (pElem) {
         pElem.classList.add('tts-active');
-        isProgrammaticScroll = true;
-        pElem.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        setTimeout(() => {
-          isProgrammaticScroll = false;
-        }, 300);
+        if (autoScroll) {
+          isProgrammaticScroll = true;
+          pElem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          setTimeout(() => {
+            isProgrammaticScroll = false;
+          }, 300);
+        }
       }
     }
 

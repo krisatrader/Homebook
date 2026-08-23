@@ -1,4 +1,4 @@
-const CACHE_NAME = 'homebook-cache-v4';
+const CACHE_NAME = 'homebook-cache-v5';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -34,9 +34,10 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
-  // Render API és külső TTS hívások közvetlen átengedése (ne cache-elje a SW)
+  // Cloud Run, Render API és külső TTS hívások közvetlen átengedése (ne cache-elje a SW)
   const url = event.request.url;
-  if (url.includes('onrender.com') ||
+  if (url.includes('run.app') ||
+      url.includes('onrender.com') ||
       url.includes('speech.microsoft.com') ||
       url.includes('translate.google.com') ||
       url.includes('api.mymemory')) {

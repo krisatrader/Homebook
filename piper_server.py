@@ -33,8 +33,10 @@ def sanitize_text_for_tts(text: str) -> str:
     """Megtisztítja a szöveget az Edge TTS számára a természetes és zavartalan kiejtéshez."""
     if not text:
         return ""
+    # XML és SSML tiltott karakterek tisztítása
+    t = text.replace('&', ' és ').replace('<', ' ').replace('>', ' ')
     # Felesleges markdown vagy formázási jelek eltávolítása
-    t = re.sub(r'[*_~`#>]', ' ', text)
+    t = re.sub(r'[*_~`#]', ' ', t)
     # Többszörös pontozások egyszerűsítése
     t = re.sub(r'\.{4,}', '...', t)
     # Gondolatjelek normalizálása
