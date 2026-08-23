@@ -1329,12 +1329,6 @@
             if (!isSpeaking) {
               isSpeaking = true;
               document.getElementById('btn-play-pause').innerText = '⏸';
-              // Szinkron Safari Audio csatorna feloldás a felhasználói kattintásban
-              const silentAudio = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
-              if (mainAudioPlayer) {
-                mainAudioPlayer.src = silentAudio;
-                mainAudioPlayer.play().catch(() => {});
-              }
             }
             speakSentence(true);
           }
@@ -2230,14 +2224,6 @@
         sebesseg: ttsRate,
         szunet: sentenceDelay
       });
-
-      // Szinkron Safari Audio csatorna feloldás a felhasználói érintési eseményben
-      const silentAudio = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
-      if (mainAudioPlayer) {
-        mainAudioPlayer.src = silentAudio;
-        mainAudioPlayer.play().catch(() => {});
-      }
-
       speakSentence(true);
     }
 
@@ -2324,7 +2310,7 @@
       try {
         const cached = await dbGetAudioCache(cacheKey);
         if (cached && cached.size > 100) {
-          return cached;
+          return (cached.type === 'audio/mpeg') ? cached : new Blob([cached], { type: 'audio/mpeg' });
         }
       } catch(e) {}
 
@@ -2362,7 +2348,8 @@
               body: ssml
             });
             if (response && response.ok) {
-              const blob = await response.blob();
+              const rawBlob = await response.blob();
+              const blob = new Blob([rawBlob], { type: 'audio/mpeg' });
               if (blob && blob.size > 100) {
                 await dbPutAudioCache(cacheKey, blob, textToSay);
                 return blob;
@@ -2382,7 +2369,8 @@
           const response = await fetch(endpointUrl, { signal: controller.signal });
           clearTimeout(timeoutId);
           if (response && response.ok) {
-            const blob = await response.blob();
+            const rawBlob = await response.blob();
+            const blob = new Blob([rawBlob], { type: 'audio/mpeg' });
             if (blob && blob.size > 100) {
               await dbPutAudioCache(cacheKey, blob, textToSay);
               return blob;
@@ -2418,12 +2406,17 @@
       if (sessionToken !== currentTTSSessionToken || !isSpeaking) return;
 
       if (blob && blob.size > 100) {
-        if (currentAudioBlobUrl) {
-          URL.revokeObjectURL(currentAudioBlobUrl);
-        }
-        currentAudioBlobUrl = URL.createObjectURL(blob);
+        const audioBlob = (blob.type === 'audio/mpeg') ? blob : new Blob([blob], { type: 'audio/mpeg' });
+        const oldBlobUrl = currentAudioBlobUrl;
+        currentAudioBlobUrl = URL.createObjectURL(audioBlob);
         mainAudioPlayer.src = currentAudioBlobUrl;
+        mainAudioPlayer.load();
         setupPlayerEventsAndPlay(mainAudioPlayer, onEndedCallback, sessionToken, voiceName, textToSay);
+        if (oldBlobUrl) {
+          setTimeout(() => {
+            try { URL.revokeObjectURL(oldBlobUrl); } catch(e) {}
+          }, 3000);
+        }
         return;
       }
 
@@ -2488,17 +2481,13 @@
       player.onerror = (e) => {
         if (sessionToken !== currentTTSSessionToken) return;
         logApp("EDGE_PLAY_ERR", "Edge-TTS audio hiba", e);
-        if (textToSay) {
+        if (textToSay && !hasStartedPlaying) {
           const isMaleVoice = voiceName.includes('Tamas') || voiceName.includes('Guy');
           playNativeUtteranceWithVoice(textToSay, null, onEndedCallback, sessionToken, isMaleVoice ? 0.85 : 1.0);
         }
       };
 
       clearTimeout(playbackSafetyTimeout);
-
-      try {
-        player.currentTime = 0;
-      } catch(e) {}
 
       const playPromise = player.play();
       if (playPromise !== undefined) {
@@ -2513,7 +2502,7 @@
             name: err ? err.name : '',
             message: err ? err.message : ''
           });
-          if (textToSay) {
+          if (textToSay && !hasStartedPlaying) {
             const isMaleVoice = voiceName.includes('Tamas') || voiceName.includes('Guy');
             playNativeUtteranceWithVoice(textToSay, null, onEndedCallback, sessionToken, isMaleVoice ? 0.85 : 1.0);
           }
