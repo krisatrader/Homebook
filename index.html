@@ -81,33 +81,33 @@
 </head>
 <body class="bg-slate-900 text-slate-100 font-sans h-screen flex flex-col overflow-hidden transition-colors duration-300 dark" id="app-body">
 
-  <header class="pt-[calc(var(--sat)+0.5rem)] pb-2.5 px-4 bg-slate-800/80 backdrop-blur-md border-b border-slate-700/50 flex items-center justify-between z-30 shrink-0">
-    <div class="flex items-center gap-2">
-      <button onclick="toggleDrawer()" class="w-9 h-9 rounded-lg bg-slate-700/50 text-slate-300 hover:text-white flex items-center justify-center text-base active:scale-95 transition" title="Menü és tartalomjegyzék">
+  <header class="pt-[calc(var(--sat)+0.5rem)] pb-2.5 px-3 sm:px-4 bg-slate-800/80 backdrop-blur-md border-b border-slate-700/50 flex items-center justify-between z-30 shrink-0">
+    <div class="flex items-center gap-1.5 sm:gap-2 min-w-0">
+      <button onclick="toggleDrawer()" class="w-9 h-9 rounded-xl bg-slate-700/50 text-slate-300 hover:text-white flex items-center justify-center text-base active:scale-95 transition shrink-0" title="Menü és tartalomjegyzék">
         ☰
       </button>
-      <button onclick="toggleLibraryModal()" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-indigo-600/20 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-600/30 transition text-xs font-semibold">
-        📚 Könyvtár
+      <button onclick="toggleLibraryModal()" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-indigo-600/20 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-600/30 transition text-xs font-semibold shrink-0">
+        📚 <span class="hidden xs:inline">Könyvtár</span>
       </button>
-      <h1 class="font-bold text-xs sm:text-sm tracking-tight bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent truncate max-w-[110px] sm:max-w-xs" id="app-title">
+      <h1 class="font-bold text-xs sm:text-sm tracking-tight bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent truncate max-w-[120px] sm:max-w-xs" id="app-title">
         Home E-Book Pro
       </h1>
     </div>
 
-    <div class="flex items-center gap-1.5">
-      <button onclick="toggleSearchModal()" class="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-slate-700/50 text-slate-300 hover:text-white flex items-center justify-center text-sm active:scale-95 transition" title="Keresés a könyvben">
+    <div class="flex items-center gap-1.5 shrink-0">
+      <button onclick="toggleSearchModal()" class="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-slate-700/50 text-slate-300 hover:text-white flex items-center justify-center text-sm active:scale-95 transition" title="Keresés a könyvben">
         🔍
       </button>
-      <button id="btn-translate-all" onclick="translateCurrentContent()" class="px-2.5 py-1.5 rounded-lg bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 font-medium text-xs flex items-center gap-1 active:scale-95 transition" title="Teljes szöveg fordítása magyarra">
-        <span>🇭🇺</span> <span class="hidden sm:inline">Fordítás</span>
+      <button id="btn-translate-all" onclick="translateCurrentContent()" class="hidden sm:flex px-2.5 py-1.5 rounded-xl bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 font-medium text-xs items-center gap-1 active:scale-95 transition" title="Teljes szöveg fordítása magyarra">
+        <span>🇭🇺</span> <span>Fordítás</span>
       </button>
-      <button onclick="addBookmark()" class="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-slate-700/50 text-slate-300 hover:text-white flex items-center justify-center text-sm active:scale-95 transition" title="Könyvjelző">
+      <button onclick="addBookmark()" class="hidden sm:flex w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-slate-700/50 text-slate-300 hover:text-white items-center justify-center text-sm active:scale-95 transition" title="Könyvjelző">
         🔖
       </button>
-      <button onclick="toggleSettingsModal()" class="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-slate-700/50 text-slate-300 hover:text-white flex items-center justify-center text-sm active:scale-95 transition" title="Beállítások">
+      <button onclick="toggleSettingsModal()" class="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-slate-700/50 text-slate-300 hover:text-white flex items-center justify-center text-sm active:scale-95 transition" title="Beállítások">
         ⚙️
       </button>
-      <button onclick="toggleDiagnosticsModal()" class="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-slate-700/50 text-slate-300 hover:text-white flex items-center justify-center text-sm active:scale-95 transition" title="Rendszernapló & Diagnosztika (Logok)">
+      <button onclick="toggleDiagnosticsModal()" class="hidden sm:flex w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-slate-700/50 text-slate-300 hover:text-white items-center justify-center text-sm active:scale-95 transition" title="Rendszernapló & Diagnosztika (Logok)">
         📋
       </button>
     </div>
@@ -259,6 +259,22 @@
       <div class="flex-1 overflow-y-auto space-y-2 text-xs" id="drawer-content">
         <!-- Dinamikus tartalom -->
       </div>
+
+      <!-- Gyorsműveletek sáv a menü alján -->
+      <div class="pt-3 border-t border-slate-700/80 grid grid-cols-3 gap-1.5 shrink-0 text-center">
+        <button onclick="addBookmark(); toggleDrawer();" class="p-2 bg-slate-900/60 hover:bg-slate-700 rounded-xl text-slate-300 hover:text-white flex flex-col items-center gap-1 transition" title="Könyvjelző">
+          <span class="text-sm">🔖</span>
+          <span class="text-[10px] font-semibold">Könyvjelző</span>
+        </button>
+        <button onclick="translateCurrentContent(); toggleDrawer();" class="p-2 bg-slate-900/60 hover:bg-slate-700 rounded-xl text-slate-300 hover:text-white flex flex-col items-center gap-1 transition" title="Fordítás">
+          <span class="text-sm">🇭🇺</span>
+          <span class="text-[10px] font-semibold">Fordítás</span>
+        </button>
+        <button onclick="toggleDiagnosticsModal(); toggleDrawer();" class="p-2 bg-slate-900/60 hover:bg-slate-700 rounded-xl text-slate-300 hover:text-white flex flex-col items-center gap-1 transition" title="Rendszernapló">
+          <span class="text-sm">📋</span>
+          <span class="text-[10px] font-semibold">Logok</span>
+        </button>
+      </div>
     </div>
     <div class="flex-1" onclick="toggleDrawer()"></div>
   </div>
@@ -274,25 +290,28 @@
     </div>
   </div>
 
-  <div class="fixed bottom-0 left-0 right-0 p-3 pb-[calc(var(--sab)+0.75rem)] bg-slate-800/90 backdrop-blur-lg border-t border-slate-700/60 z-30 flex items-center justify-between gap-3 shadow-2xl">
+  <!-- LEJÁTSZÓ SÁV (MINIMALISTA, RESZPONZÍV IPHONE/MOBIL KIALAKÍTÁS) -->
+  <div class="fixed bottom-0 left-0 right-0 px-3 py-2.5 sm:p-3 pb-[calc(var(--sab)+0.6rem)] bg-slate-800/95 backdrop-blur-xl border-t border-slate-700/70 z-30 flex items-center justify-between gap-2.5 sm:gap-3 shadow-2xl">
     
-    <div class="flex items-center gap-1.5 shrink-0">
-      <button onclick="previousChapter()" class="w-9 h-9 rounded-full bg-slate-700/80 hover:bg-slate-600 text-slate-200 flex items-center justify-center text-xs font-bold active:scale-95 transition" title="Előző fejezet">
+    <!-- LEJÁTSZÓ GOMBOK -->
+    <div class="flex items-center gap-1 sm:gap-1.5 shrink-0">
+      <button onclick="previousChapter()" class="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-slate-700/70 hover:bg-slate-600 text-slate-200 flex items-center justify-center text-[10px] sm:text-xs font-bold active:scale-95 transition" title="Előző fejezet">
         ⏮
       </button>
       
-      <button id="btn-play-pause" onclick="toggleTTS()" class="w-11 h-11 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white flex items-center justify-center text-base shrink-0 shadow-lg shadow-indigo-600/40 active:scale-95 transition" title="Felolvasás indítása/szüneteltetése">
+      <button id="btn-play-pause" onclick="toggleTTS()" class="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white flex items-center justify-center text-base sm:text-lg shrink-0 shadow-lg shadow-indigo-600/40 active:scale-90 transition" title="Felolvasás indítása/szüneteltetése">
         ▶
       </button>
 
-      <button onclick="nextChapter()" class="w-9 h-9 rounded-full bg-slate-700/80 hover:bg-slate-600 text-slate-200 flex items-center justify-center text-xs font-bold active:scale-95 transition" title="Következő fejezet">
+      <button onclick="nextChapter()" class="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-slate-700/70 hover:bg-slate-600 text-slate-200 flex items-center justify-center text-[10px] sm:text-xs font-bold active:scale-95 transition" title="Következő fejezet">
         ⏭
       </button>
     </div>
 
+    <!-- FEJEZET & HALADÁS KÖZÉPEN -->
     <div class="min-w-0 flex-1 space-y-1">
-      <div class="flex items-center justify-between gap-2">
-        <div id="bottom-chapter-title" class="text-xs font-bold text-slate-100 truncate flex items-center gap-1.5 min-w-0">
+      <div class="flex items-center justify-between gap-1.5">
+        <div id="bottom-chapter-title" class="text-xs font-bold text-slate-100 truncate flex items-center gap-1 min-w-0">
           <span class="text-indigo-400 text-xs shrink-0">📖</span>
           <span id="bottom-chapter-name" class="truncate">Fejezet betöltése...</span>
         </div>
@@ -305,18 +324,18 @@
       </div>
 
       <div class="flex items-center justify-between text-[10px] text-slate-400 leading-none pt-0.5">
-        <span id="bottom-chapter-paragraphs" class="truncate font-medium">1/1 bek.</span>
-        <span id="bottom-voice-name" class="text-indigo-300 font-medium truncate px-1 text-center" title="Aktuális felolvasó hang">🎙️ MS Tamás</span>
+        <span id="bottom-voice-name" class="text-indigo-300 font-medium truncate max-w-[120px] sm:max-w-none" title="Aktuális felolvasó hang">🎙️ MS Tamás</span>
         <span id="bottom-chapter-time-left" class="text-indigo-300/90 font-medium shrink-0 ml-1">még ~0 perc</span>
       </div>
     </div>
 
-    <div class="flex items-center gap-1.5 shrink-0">
-      <button onclick="toggleSleepTimerModal()" id="btn-sleep-timer" class="px-2 py-1.5 rounded-lg bg-slate-700 text-xs font-bold text-slate-300 hover:bg-slate-600 active:scale-95 transition flex items-center gap-1" title="Elalvási időzítő">
-        🌙 <span id="lbl-sleep-timer-btn">Ki</span>
+    <!-- GYORS GOMBOK (SEBESSÉG & IDŐZÍTŐ) -->
+    <div class="flex items-center gap-1 sm:gap-1.5 shrink-0">
+      <button onclick="toggleSleepTimerModal()" id="btn-sleep-timer" class="px-2 py-1.5 rounded-xl bg-slate-700/80 text-xs font-bold text-slate-300 hover:bg-slate-600 active:scale-95 transition flex items-center gap-0.5" title="Elalvási időzítő">
+        🌙<span id="lbl-sleep-timer-btn" class="hidden sm:inline ml-0.5">Ki</span>
       </button>
 
-      <button onclick="changeTTSSpeedShortcut()" id="btn-speed" class="px-2 py-1.5 rounded-lg bg-slate-700 text-xs font-bold text-slate-300 hover:bg-slate-600 active:scale-95 transition" title="Felolvasási sebesség">
+      <button onclick="changeTTSSpeedShortcut()" id="btn-speed" class="px-2 py-1.5 rounded-xl bg-indigo-600/20 text-indigo-300 border border-indigo-500/30 text-xs font-bold hover:bg-indigo-600/30 active:scale-95 transition" title="Felolvasási sebesség">
         1.0x
       </button>
     </div>
