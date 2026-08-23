@@ -1339,29 +1339,62 @@
       const fragment = document.createDocumentFragment();
 
       book.paragraphs.forEach((pText, idx) => {
-        // 1. Fejezet kezdőpont ellenőrzése a könyv metaadataiból
+        const pType = (book.paragraphTypes && book.paragraphTypes[idx]) || 'p';
+
+        // 1. Fejezet / Alfejezet kezdőpont ellenőrzése a könyv metaadataiból
         const chapter = book.chapters ? book.chapters.find(ch => ch.startP === idx) : null;
         if (chapter && chapter.title && !chapter.title.startsWith(`${idx + 1}. Oldal`)) {
-          const chHeading = document.createElement('h1');
-          chHeading.className = `pt-8 pb-3 mt-6 mb-3 font-bold tracking-tight text-indigo-400 border-b border-indigo-500/20 flex items-center gap-2 ${currentFontFamily === 'serif' ? 'font-serif' : 'font-sans'}`;
-          chHeading.style.fontSize = `${Math.round(currentFontSize * 1.4)}px`;
-          chHeading.innerHTML = `<span class="text-sm opacity-80">📖</span> <span>${chapter.title}</span>`;
-          fragment.appendChild(chHeading);
+          const chBanner = document.createElement('div');
+          const isL1 = (chapter.level || 1) === 1;
+          
+          if (isL1) {
+            chBanner.className = "pt-8 pb-3 mt-6 mb-3 border-b border-indigo-500/30 flex items-center justify-between";
+            chBanner.innerHTML = `
+              <div class="flex items-center gap-2">
+                <span class="text-xs uppercase font-bold tracking-widest text-indigo-400 bg-indigo-500/10 px-2.5 py-1 rounded-lg border border-indigo-500/20">
+                  📖 Fejezet
+                </span>
+                <span class="text-xs font-semibold text-slate-400 truncate max-w-[200px] sm:max-w-md">${chapter.title}</span>
+              </div>
+            `;
+          } else {
+            chBanner.className = "pt-4 pb-1 mt-4 mb-2 flex items-center gap-1.5 text-xs font-semibold text-indigo-300/80 border-b border-slate-700/40";
+            chBanner.innerHTML = `<span class="text-indigo-400">↳</span> <span>${chapter.title}</span>`;
+          }
+          fragment.appendChild(chBanner);
         }
 
-        // 2. Bekezdés vizsgálata: Címsor-e a szövege (pl. "1. Fejezet", "Chapter 1", stb.)
+        // 2. Bekezdés típusának és szemantikájának formázása
         const isHeadingPattern = /^(\d+\.?\s*(fejezet|chapter|rész|szakasz)|fejezet\s*\d+|chapter\s*\d+|[IVXLCDM]+\.?\s*(fejezet|chapter)?\b)/i.test(pText.trim()) ||
-                                 (pText.trim().length <= 60 && /^(fejezet|chapter|epilogue|prologue|előszó|utószó)/i.test(pText.trim()));
+                                 (pText.trim().length <= 60 && /^(fejezet|chapter|epilogue|prologue|előszó|utószó|tartalom)/i.test(pText.trim()));
 
         const p = document.createElement('p');
         p.id = `para-${idx}`;
         
-        if (isHeadingPattern) {
-          p.className = `pt-6 pb-2 font-bold tracking-tight text-indigo-300 transition-all duration-150 cursor-pointer hover:opacity-90 ${currentFontFamily === 'serif' ? 'font-serif' : 'font-sans'}`;
-          p.style.fontSize = `${Math.round(currentFontSize * 1.3)}px`;
+        const fontClass = currentFontFamily === 'serif' ? 'font-serif' : 'font-sans';
+
+        if (pType === 'h1' || (pType === 'p' && isHeadingPattern)) {
+          p.className = `pt-6 pb-2 font-black tracking-tight text-white transition-all duration-150 cursor-pointer hover:opacity-90 ${fontClass}`;
+          p.style.fontSize = `${Math.round(currentFontSize * 1.4)}px`;
+          p.style.lineHeight = `1.3`;
+        } else if (pType === 'h2') {
+          p.className = `pt-4 pb-1.5 font-bold tracking-tight text-indigo-200 transition-all duration-150 cursor-pointer hover:opacity-90 ${fontClass}`;
+          p.style.fontSize = `${Math.round(currentFontSize * 1.25)}px`;
+          p.style.lineHeight = `1.35`;
+        } else if (pType === 'h3') {
+          p.className = `pt-3 pb-1 font-semibold text-slate-200 transition-all duration-150 cursor-pointer hover:opacity-90 ${fontClass}`;
+          p.style.fontSize = `${Math.round(currentFontSize * 1.15)}px`;
           p.style.lineHeight = `1.4`;
+        } else if (pType === 'blockquote') {
+          p.className = `italic text-slate-300 pl-4 py-2 my-2 border-l-4 border-indigo-500/80 bg-slate-800/40 rounded-r-xl transition-all duration-150 cursor-pointer hover:opacity-90 leading-relaxed ${fontClass}`;
+          p.style.fontSize = `${Math.round(currentFontSize * 0.95)}px`;
+          p.style.lineHeight = `${currentLineHeight}`;
+        } else if (pType === 'li') {
+          p.className = `pl-5 list-disc text-slate-200 transition-all duration-150 cursor-pointer hover:opacity-90 leading-relaxed ${fontClass}`;
+          p.style.fontSize = `${currentFontSize}px`;
+          p.style.lineHeight = `${currentLineHeight}`;
         } else {
-          p.className = `transition-all duration-150 leading-relaxed cursor-pointer hover:opacity-90 ${currentFontFamily === 'serif' ? 'font-serif' : 'font-sans'}`;
+          p.className = `transition-all duration-150 leading-relaxed cursor-pointer hover:opacity-90 ${fontClass}`;
           p.style.fontSize = `${currentFontSize}px`;
           p.style.lineHeight = `${currentLineHeight}`;
         }
@@ -1423,45 +1456,205 @@
             const epubBook = ePub(buffer);
             await epubBook.ready;
 
+            let author = "Ismeretlen szerző";
+            let coverUrl = null;
+
             try {
               const meta = await epubBook.loaded.metadata;
-              if (meta && meta.title && meta.title.trim().length > 0) {
-                title = meta.title.trim();
+              if (meta) {
+                if (meta.title && meta.title.trim().length > 0) title = meta.title.trim();
+                if (meta.creator && meta.creator.trim().length > 0) author = meta.creator.trim();
+                else if (meta.author && meta.author.trim().length > 0) author = meta.author.trim();
               }
             } catch(mErr) {}
-            
+
+            try {
+              const cUrl = await epubBook.coverUrl();
+              if (cUrl) coverUrl = cUrl;
+            } catch(cErr) {}
+
             let loadedParagraphs = [];
-            let chapters = [];
+            let loadedParagraphTypes = [];
+            const hrefToPIdx = {};
             const spineItems = (epubBook.spine && (epubBook.spine.spineItems || epubBook.spine.items)) || [];
 
             for (const section of spineItems) {
               try {
                 const doc = await section.load(epubBook.load.bind(epubBook));
                 if (!doc) continue;
-                let pNodes = Array.from(doc.querySelectorAll('p, h1, h2, h3, h4, blockquote, li'));
-                if (pNodes.length === 0) {
-                  pNodes = Array.from(doc.querySelectorAll('div, section')).filter(el => !el.querySelector('div, section, p'));
+
+                const fullSecHref = section.href || '';
+                const secHref = fullSecHref.replace(/^.*?([^/]+\.[^#?]+).*?$/, '$1');
+
+                const sectionStartP = loadedParagraphs.length;
+                if (secHref) hrefToPIdx[secHref.toLowerCase()] = sectionStartP;
+                if (fullSecHref) hrefToPIdx[fullSecHref.toLowerCase()] = sectionStartP;
+
+                // Szemantikus DOM elemek keresése sorrendben
+                let domNodes = Array.from(doc.querySelectorAll('h1, h2, h3, h4, h5, h6, p, blockquote, li'));
+                if (domNodes.length === 0) {
+                  domNodes = Array.from(doc.querySelectorAll('div, section')).filter(el => !el.querySelector('div, section, p, h1, h2, h3'));
                 }
-                const elems = pNodes
-                  .map(el => (el.innerText || el.textContent || '').trim())
-                  .filter(t => t.length > 0);
-                
-                if (elems.length > 0) {
-                  const startP = loadedParagraphs.length;
-                  loadedParagraphs.push(...elems);
-                  const endP = loadedParagraphs.length - 1;
-                  chapters.push({ title: elems[0].substring(0, 35) + '...', startP, endP });
+
+                for (const el of domNodes) {
+                  const rawText = (el.innerText || el.textContent || '').trim();
+                  if (!rawText) continue;
+
+                  const pIdx = loadedParagraphs.length;
+                  const tag = (el.tagName || 'p').toLowerCase();
+                  let pType = 'p';
+                  if (tag === 'h1') pType = 'h1';
+                  else if (tag === 'h2') pType = 'h2';
+                  else if (tag === 'h3' || tag === 'h4' || tag === 'h5' || tag === 'h6') pType = 'h3';
+                  else if (tag === 'blockquote') pType = 'blockquote';
+                  else if (tag === 'li') pType = 'li';
+
+                  loadedParagraphs.push(rawText);
+                  loadedParagraphTypes.push(pType);
+
+                  // ID és Anchor leképezések rögzítése
+                  if (el.id) {
+                    const anchor = el.id.toLowerCase();
+                    if (secHref) hrefToPIdx[`${secHref.toLowerCase()}#${anchor}`] = pIdx;
+                    if (fullSecHref) hrefToPIdx[`${fullSecHref.toLowerCase()}#${anchor}`] = pIdx;
+                    hrefToPIdx[`#${anchor}`] = pIdx;
+                  }
                 }
               } catch(secErr) {
                 console.warn("EPUB fejezet betöltési hiba:", secErr);
               }
             }
-            
-            if (loadedParagraphs.length > 0) {
-              await addBookToLibrary(title, "Saját könyv", loadedParagraphs, chapters);
-            } else {
-              showToast("Az EPUB fájlból nem sikerült szöveges bekezdést kinyerni.");
+
+            if (loadedParagraphs.length === 0) {
+              showToast("Az EPUB fájlból nem sikerült szöveges tartalmat kinyerni.");
+              continue;
             }
+
+            // ==========================================
+            // 📑 HIERARCHIKUS TARTALOMJEGYZÉK (TOC) ÉPÍTÉS
+            // ==========================================
+            let chapters = [];
+
+            try {
+              const nav = await epubBook.loaded.navigation;
+              if (nav && nav.toc && nav.toc.length > 0) {
+                function walkToc(items, level = 1) {
+                  for (const item of items) {
+                    const rawLabel = (item.label || '').replace(/[\r\n\t]+/g, ' ').trim();
+                    if (!rawLabel) continue;
+
+                    let matchedPIdx = -1;
+                    if (item.href) {
+                      const cleanHref = item.href.trim().toLowerCase();
+                      const fileOnly = cleanHref.replace(/^.*?([^/]+\.[^#?]+).*?$/, '$1');
+
+                      // 1. Pontos egyezés (fájl + anchor)
+                      if (hrefToPIdx[cleanHref] !== undefined) {
+                        matchedPIdx = hrefToPIdx[cleanHref];
+                      } 
+                      // 2. Csak anchor egyezés
+                      else if (cleanHref.includes('#')) {
+                        const hashPart = cleanHref.substring(cleanHref.indexOf('#'));
+                        if (hrefToPIdx[hashPart] !== undefined) {
+                          matchedPIdx = hrefToPIdx[hashPart];
+                        }
+                      }
+                      // 3. Fájlnév egyezés
+                      if (matchedPIdx === -1 && hrefToPIdx[fileOnly] !== undefined) {
+                        matchedPIdx = hrefToPIdx[fileOnly];
+                      }
+                    }
+
+                    // 4. Szöveges hasonlóság fallback, ha a hivatkozás nem talált semmit
+                    if (matchedPIdx === -1) {
+                      const searchSnippet = rawLabel.toLowerCase().substring(0, 30);
+                      const foundIdx = loadedParagraphs.findIndex(p => p.toLowerCase().includes(searchSnippet));
+                      if (foundIdx !== -1) matchedPIdx = foundIdx;
+                    }
+
+                    if (matchedPIdx !== -1) {
+                      chapters.push({
+                        title: rawLabel,
+                        level: level,
+                        startP: matchedPIdx,
+                        endP: loadedParagraphs.length - 1
+                      });
+                    }
+
+                    if (item.subitems && item.subitems.length > 0) {
+                      walkToc(item.subitems, level + 1);
+                    }
+                  }
+                }
+
+                walkToc(nav.toc, 1);
+              }
+            } catch(navErr) {
+              console.warn("EPUB TOC beolvasási hiba:", navErr);
+            }
+
+            // Ha nincs formális TOC, vagy üres volt, építsünk a DOM fejezeteiből és címeiből
+            if (chapters.length === 0) {
+              for (let pIdx = 0; pIdx < loadedParagraphs.length; pIdx++) {
+                const pType = loadedParagraphTypes[pIdx];
+                const pText = loadedParagraphs[pIdx];
+                const isHeadingPattern = /^(\d+\.?\s*(fejezet|chapter|rész|szakasz)|fejezet\s*\d+|chapter\s*\d+|[IVXLCDM]+\.?\s*(fejezet|chapter)?\b)/i.test(pText) ||
+                                         (pText.length <= 60 && /^(fejezet|chapter|epilogue|prologue|előszó|utószó|tartalom)/i.test(pText));
+                
+                if (pType === 'h1' || isHeadingPattern) {
+                  chapters.push({
+                    title: pText.length > 60 ? pText.substring(0, 57) + '...' : pText,
+                    level: 1,
+                    startP: pIdx,
+                    endP: loadedParagraphs.length - 1
+                  });
+                } else if (pType === 'h2' && pText.length <= 80) {
+                  chapters.push({
+                    title: pText,
+                    level: 2,
+                    startP: pIdx,
+                    endP: loadedParagraphs.length - 1
+                  });
+                }
+              }
+            }
+
+            // Ha még így sincs fejezet, egyetlen fejezet a teljes könyv
+            if (chapters.length === 0) {
+              chapters.push({
+                title: "Teljes Könyv",
+                level: 1,
+                startP: 0,
+                endP: loadedParagraphs.length - 1
+              });
+            }
+
+            // Fejezetek rendezése és duplikáció szűrés
+            chapters.sort((a, b) => a.startP - b.startP);
+
+            const uniqueChapters = [];
+            for (let c = 0; c < chapters.length; c++) {
+              const cur = chapters[c];
+              if (uniqueChapters.length > 0 && uniqueChapters[uniqueChapters.length - 1].startP === cur.startP) {
+                if (cur.level < uniqueChapters[uniqueChapters.length - 1].level) {
+                  uniqueChapters[uniqueChapters.length - 1] = cur;
+                }
+              } else {
+                uniqueChapters.push(cur);
+              }
+            }
+            chapters = uniqueChapters;
+
+            // Határok (endP) kiszámítása
+            for (let c = 0; c < chapters.length; c++) {
+              if (c < chapters.length - 1) {
+                chapters[c].endP = Math.max(chapters[c].startP, chapters[c + 1].startP - 1);
+              } else {
+                chapters[c].endP = loadedParagraphs.length - 1;
+              }
+            }
+
+            await addBookToLibrary(title, author, loadedParagraphs, chapters, false, loadedParagraphTypes, coverUrl);
           } catch (err) {
             console.warn("EPUB hiba:", err);
             showToast("Hiba az EPUB fájl feldolgozása során.");
@@ -1486,7 +1679,7 @@
                   const startP = loadedParagraphs.length;
                   loadedParagraphs.push(pageText);
                   const endP = loadedParagraphs.length - 1;
-                  chapters.push({ title: `${pNo}. Oldal`, startP, endP });
+                  chapters.push({ title: `${pNo}. Oldal`, level: 1, startP, endP });
                 }
               } catch(pErr) {
                 console.warn("PDF oldal hiba:", pErr);
@@ -1513,16 +1706,18 @@
       showToast("Könyv hozzáadva a Könyvtárhoz!");
     }
 
-    async function addBookToLibrary(title, author, paragraphs, chapters, isTranslated = false) {
+    async function addBookToLibrary(title, author, paragraphs, chapters, isTranslated = false, paragraphTypes = null, coverUrl = null) {
       const newBook = {
         id: 'book-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
         title: title,
-        author: author,
+        author: author || "Ismeretlen szerző",
         isTranslated: isTranslated,
         status: 'uj',
         lastSeenPIdx: 0,
-        chapters: chapters,
-        paragraphs: paragraphs
+        chapters: chapters || [],
+        paragraphs: paragraphs || [],
+        paragraphTypes: paragraphTypes || [],
+        coverUrl: coverUrl || null
       };
 
       myLibrary.unshift(newBook);
@@ -1620,6 +1815,13 @@
       filteredBooks.forEach(b => {
         const totalP = b.paragraphs.length || 1;
         const progressPct = Math.round(((b.lastSeenPIdx || 0) / totalP) * 100);
+        const l1Chapters = (b.chapters || []).filter(c => (c.level || 1) === 1);
+        const subChapters = (b.chapters || []).filter(c => (c.level || 1) > 1);
+        
+        let chInfo = `${(b.chapters || []).length} fejezet`;
+        if (subChapters.length > 0) {
+          chInfo = `${l1Chapters.length} főfejezet • ${subChapters.length} alfejezet`;
+        }
 
         let statusBadge = '';
         if (b.status === 'olvasott' || progressPct >= 95) {
@@ -1637,9 +1839,10 @@
         
         card.innerHTML = `
           <div class="flex items-start justify-between gap-2">
-            <div>
-              <h3 class="font-bold text-sm text-white">${b.title}</h3>
-              <p class="text-xs text-slate-400">${b.author}</p>
+            <div class="min-w-0 flex-1">
+              <h3 class="font-bold text-sm text-white truncate">${b.title}</h3>
+              <p class="text-xs text-indigo-300/90 font-medium">${b.author || 'Ismeretlen szerző'}</p>
+              <p class="text-[11px] text-slate-400">${chInfo} • ${totalP} bekezdés</p>
             </div>
             ${statusBadge}
           </div>
@@ -2798,8 +3001,8 @@
       content.innerHTML = '';
 
       if (tab === 'toc') {
-        if (book.chapters.length === 0) {
-          content.innerText = "Nincsenek fejezetek.";
+        if (!book.chapters || book.chapters.length === 0) {
+          content.innerHTML = '<p class="text-xs text-slate-400 text-center py-4">Nincsenek fejezetek.</p>';
           return;
         }
 
@@ -2814,14 +3017,27 @@
           }
 
           const isCompleted = progress >= 100;
+          const isCurrent = lastSeenPIdx >= ch.startP && lastSeenPIdx <= ch.endP;
+          const level = ch.level || 1;
 
           const item = document.createElement('div');
-          item.className = "p-2.5 bg-slate-900/60 hover:bg-slate-700/60 rounded-xl cursor-pointer border border-slate-700/50 space-y-1.5 transition";
+          const indentClass = level === 1 ? '' : (level === 2 ? 'ml-3.5 pl-2.5 border-l-2 border-indigo-500/50' : 'ml-7 pl-2 border-l-2 border-slate-600/50');
+          const bgClass = isCurrent ? 'bg-indigo-900/50 border-indigo-500/60 ring-1 ring-indigo-500/40' : 'bg-slate-900/60 hover:bg-slate-700/60 border-slate-700/50';
+
+          item.className = `p-2.5 ${indentClass} ${bgClass} rounded-xl cursor-pointer border space-y-1.5 transition`;
           
+          let prefixIcon = '';
+          if (level === 1) prefixIcon = '<span class="text-xs text-indigo-400 shrink-0">📖</span>';
+          else if (level === 2) prefixIcon = '<span class="text-[11px] text-slate-400 shrink-0">↳</span>';
+          else prefixIcon = '<span class="text-[10px] text-slate-500 shrink-0">•</span>';
+
           item.innerHTML = `
             <div class="flex items-center justify-between gap-2">
-              <span class="font-semibold ${isCompleted ? 'text-emerald-400' : 'text-slate-200'} truncate">${ch.title}</span>
-              ${isCompleted ? '<span class="text-emerald-400 font-bold shrink-0">✓</span>' : `<span class="text-[10px] font-bold text-indigo-400 shrink-0">${progress}%</span>`}
+              <div class="flex items-center gap-1.5 min-w-0">
+                ${prefixIcon}
+                <span class="${level === 1 ? 'font-bold' : (level === 2 ? 'font-semibold' : 'font-normal')} ${isCurrent ? 'text-indigo-200 font-bold' : (isCompleted ? 'text-emerald-400' : 'text-slate-200')} text-xs truncate">${ch.title}</span>
+              </div>
+              ${isCompleted ? '<span class="text-emerald-400 font-bold text-xs shrink-0">✓</span>' : `<span class="text-[10px] font-mono font-bold text-indigo-400 shrink-0">${progress}%</span>`}
             </div>
             <div class="w-full bg-slate-800 rounded-full h-1 overflow-hidden">
               <div class="${isCompleted ? 'bg-emerald-500' : 'bg-indigo-500'} h-full transition-all duration-300" style="width: ${progress}%"></div>
