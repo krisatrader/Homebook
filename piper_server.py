@@ -17,6 +17,8 @@ import json
 import asyncio
 import mimetypes
 from http.server import HTTPServer, BaseHTTPRequestHandler
+import time
+import threading
 from socketserver import ThreadingMixIn
 from urllib.parse import urlparse, parse_qs
 
@@ -28,6 +30,28 @@ except ImportError:
 
 PORT = int(os.environ.get("PORT", 5000))
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+SYNC_STORE_PATH = os.path.join(BASE_DIR, "sync_store.json")
+SYNC_LOCK = threading.Lock()
+SYNC_DATA = {}
+
+def load_sync_store():
+    global SYNC_DATA
+    if os.path.exists(SYNC_STORE_PATH):
+        try:
+            with open(SYNC_STORE_PATH, "r", encoding="utf-8") as f:
+                SYNC_DATA = json.load(f)
+        except Exception as e:
+            print(f"[!] Hiba a sync_store betöltésekor: {e}")
+            SYNC_DATA = {}
+
+def save_sync_store():
+    try:
+        with open(SYNC_STORE_PATH, "w", encoding="utf-8") as f:
+            json.dump(SYNC_DATA, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"[!] Hiba a sync_store mentésekor: {e}")
+
+load_sync_store()
 
 def normalize_hungarian_encoding(text: str) -> str:
     """Javítja a sérült vagy nem szabványos TTF betűkészletből (Q/q, õ/û, UTF-8 mojibake) származó karaktereket."""
@@ -191,12 +215,48 @@ class HomebookServerHandler(BaseHTTPRequestHandler):
                 "status": "ok",
                 "service": "Homebook Edge Neural TTS",
                 "has_edge_tts": HAS_EDGE_TTS,
+                "sync_enabled": True,
                 "voices": ["hu-HU-TamasNeural", "hu-HU-NoemiNeural", "en-US-GuyNeural", "en-US-JennyNeural", "de-DE-KatjaNeural"]
             }
             self.wfile.write(json.dumps(status_data).encode("utf-8"))
             return
 
-        # 3. Homebook Pro Web Alkalmazás Kiszolgálása (index.html, sw.js, stb.)
+        # 3. Felhő Szinkronizáció Lekérdezés (/api/sync/progress vagy /api/sync)
+        if path in ["/api/sync/progress", "/api/sync"]:
+            params = parse_qs(parsed.query)
+            sync_id = params.get("syncId", [""])[0].strip()
+            title = params.get("title", [""])[0].strip().lower()
+
+            if not sync_id:
+                self.send_response(400)
+                self._send_cors_headers()
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(b'{"error": "Hianyzo syncId parameter"}')
+                return
+
+            with SYNC_LOCK:
+                user_books = SYNC_DATA.get(sync_id, {})
+                if title:
+                    norm_query = re.sub(r'[^a-zA-Z0-9áéíóöőúüűÁÉÍÓÖŐÚÜŰ]+', '', title)
+                    matched = user_books.get(norm_query)
+                    if not matched:
+                        for k, v in user_books.items():
+                            if norm_query in k or k in norm_query:
+                                matched = v
+                                break
+                    resp_data = {"status": "ok", "syncId": sync_id, "book": matched}
+                else:
+                    resp_data = {"status": "ok", "syncId": sync_id, "books": user_books}
+
+            self.send_response(200)
+            self._send_cors_headers()
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(json.dumps(resp_data, ensure_ascii=False).encode("utf-8"))
+            return
+
+        # 4. Homebook Pro Web Alkalmazás Kiszolgálása (index.html, sw.js, stb.)
         if path == "/" or path == "/index.html":
             file_path = os.path.join(BASE_DIR, "index.html")
         else:
@@ -240,8 +300,56 @@ class HomebookServerHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlparse(self.path)
+        path = parsed.path
         content_len = int(self.headers.get("Content-Length", 0))
         post_body = self.rfile.read(content_len).decode("utf-8")
+
+        # 1. Felhő Szinkronizáció Mentés (/api/sync/progress vagy /api/sync)
+        if path in ["/api/sync/progress", "/api/sync"]:
+            try:
+                data = json.loads(post_body)
+                sync_id = (data.get("syncId") or "").strip()
+                book_title = (data.get("bookTitle") or data.get("title") or "").strip()
+                last_p = int(data.get("lastSeenPIdx", 0))
+                last_s = int(data.get("lastSeenSentenceIdx", 0))
+                pct = int(data.get("percent", 0))
+                ts = int(data.get("timestamp", 0)) or int(time.time() * 1000)
+            except Exception:
+                self.send_response(400)
+                self._send_cors_headers()
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(b'{"error": "Ervenytelen JSON"}')
+                return
+
+            if not sync_id or not book_title:
+                self.send_response(400)
+                self._send_cors_headers()
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(b'{"error": "syncId es bookTitle szukseges"}')
+                return
+
+            norm_title = re.sub(r'[^a-zA-Z0-9áéíóöőúüűÁÉÍÓÖŐÚÜŰ]+', '', book_title.lower())
+            with SYNC_LOCK:
+                if sync_id not in SYNC_DATA:
+                    SYNC_DATA[sync_id] = {}
+                SYNC_DATA[sync_id][norm_title] = {
+                    "bookTitle": book_title,
+                    "lastSeenPIdx": last_p,
+                    "lastSeenSentenceIdx": last_s,
+                    "percent": pct,
+                    "timestamp": ts,
+                    "updatedAt": time.strftime("%Y-%m-%d %H:%M:%S")
+                }
+                save_sync_store()
+
+            self.send_response(200)
+            self._send_cors_headers()
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(b'{"status": "ok", "synced": true}')
+            return
 
         text = ""
         voice = "hu-HU-TamasNeural"
