@@ -1196,7 +1196,7 @@
 
     window.addEventListener('DOMContentLoaded', async () => {
       if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('./sw.js?v=7').then((reg) => {
+        navigator.serviceWorker.register('./sw.js?v=8').then((reg) => {
           reg.update().catch(() => {});
           reg.onupdatefound = () => {
             const installingWorker = reg.installing;
@@ -1461,9 +1461,11 @@
       clearTimeout(saveTimeout);
       saveTimeout = setTimeout(async () => {
         book.lastSeenPIdx = lastSeenPIdx;
+        book.lastSeenSentenceIdx = currentSentenceIdx;
         const bIdx = myLibrary.findIndex(b => b.id === book.id);
         if (bIdx !== -1) {
           myLibrary[bIdx].lastSeenPIdx = lastSeenPIdx;
+          myLibrary[bIdx].lastSeenSentenceIdx = currentSentenceIdx;
           myLibrary[bIdx].status = book.status || 'folyamatban';
         }
         localStorage.setItem('ebook_active_book_id', book.id);
@@ -1711,7 +1713,21 @@
         document.getElementById('app-title').innerText = book.title;
         localStorage.setItem('ebook_active_book_id', bookId);
         
+        prepareTTSData();
         renderBook();
+
+        if (book.lastSeenSentenceIdx !== undefined && ttsSentences && ttsSentences[book.lastSeenSentenceIdx]) {
+          currentSentenceIdx = book.lastSeenSentenceIdx;
+          lastSeenPIdx = ttsSentences[currentSentenceIdx].pIdx;
+          highlightTTSSentence(ttsSentences[currentSentenceIdx], false);
+        } else if (ttsSentences && ttsSentences.length > 0) {
+          const matchedIdx = ttsSentences.findIndex(s => s.pIdx === lastSeenPIdx);
+          if (matchedIdx !== -1) {
+            currentSentenceIdx = matchedIdx;
+            highlightTTSSentence(ttsSentences[currentSentenceIdx], false);
+          }
+        }
+
         scrollToParagraph(lastSeenPIdx, false, true);
         checkCurrentBookOfflineStatus();
       }
@@ -2962,8 +2978,10 @@
       document.getElementById('btn-play-pause').innerText = '▶';
       const statElem = document.getElementById('tts-status');
       if (statElem) statElem.innerText = 'Szüneteltetve';
-      removeActiveHighlights();
+      // Megőrizzük az aktuális mondat és bekezdés kiemelését szüneteltetéskor és más appba váltáskor
+      ensureCurrentHighlightVisible();
       updateChapterProgressDisplay();
+      saveReadingProgressToLocal();
       if (wasSpeaking) {
         logApp("TTS_PAUSED", `Felolvasás szüneteltetve mondat #${currentSentenceIdx + 1}`);
       }
@@ -3786,6 +3804,30 @@
         el.classList.remove('tts-sentence-active');
       });
     }
+
+    function ensureCurrentHighlightVisible() {
+      if (!ttsSentences || ttsSentences.length === 0) return;
+      if (currentSentenceIdx >= 0 && currentSentenceIdx < ttsSentences.length) {
+        const item = ttsSentences[currentSentenceIdx];
+        if (item) {
+          highlightTTSSentence(item, false);
+        }
+      }
+    }
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        ensureCurrentHighlightVisible();
+      }
+    });
+
+    window.addEventListener('pageshow', () => {
+      ensureCurrentHighlightVisible();
+    });
+
+    window.addEventListener('focus', () => {
+      ensureCurrentHighlightVisible();
+    });
 
     function jumpToSentenceInParagraph(pIdx, sIdx) {
       if (!ttsSentences || ttsSentences.length === 0) return;
