@@ -2228,6 +2228,18 @@
         sebesseg: ttsRate,
         szunet: sentenceDelay
       });
+
+      // Szinkron Safari Audio csatorna feloldás a felhasználói érintési eseményben
+      const silentAudio = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
+      if (playerA) {
+        playerA.src = silentAudio;
+        playerA.play().catch(() => {});
+      }
+      if (playerB) {
+        playerB.src = silentAudio;
+        playerB.play().catch(() => {});
+      }
+
       speakSentence(true);
     }
 
