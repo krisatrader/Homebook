@@ -2349,7 +2349,7 @@
 
         logApp("DOUBLE_BUFFER_HIT", `⚡ 0ms Ping-Pong átadás -> Player ${activePlayerId} indult mondat #${currentSentenceIdx + 1}`);
 
-        setupPlayerEventsAndPlay(activePlayer, onEndedCallback, sessionToken, voiceName);
+        setupPlayerEventsAndPlay(activePlayer, onEndedCallback, sessionToken, voiceName, textToSay);
         prepareStandbyAudio(currentSentenceIdx + 1, voiceCode);
         return;
       }
@@ -2365,7 +2365,7 @@
         }
         currentAudioBlobUrl = URL.createObjectURL(cachedBlob);
         activePlayer.src = currentAudioBlobUrl;
-        setupPlayerEventsAndPlay(activePlayer, onEndedCallback, sessionToken, voiceName);
+        setupPlayerEventsAndPlay(activePlayer, onEndedCallback, sessionToken, voiceName, textToSay);
         prepareStandbyAudio(currentSentenceIdx + 1, voiceCode);
         return;
       }
@@ -2390,7 +2390,7 @@
           }
           currentAudioBlobUrl = URL.createObjectURL(blob);
           activePlayer.src = currentAudioBlobUrl;
-          setupPlayerEventsAndPlay(activePlayer, onEndedCallback, sessionToken, voiceName);
+          setupPlayerEventsAndPlay(activePlayer, onEndedCallback, sessionToken, voiceName, textToSay);
           prepareStandbyAudio(currentSentenceIdx + 1, voiceCode);
           return;
         }
@@ -2408,7 +2408,7 @@
       playNativeUtteranceWithVoice(textToSay, null, onEndedCallback, sessionToken, isMaleVoice ? 0.85 : 1.0);
     }
 
-    function setupPlayerEventsAndPlay(player, onEndedCallback, sessionToken, voiceName) {
+    function setupPlayerEventsAndPlay(player, onEndedCallback, sessionToken, voiceName, textToSay = '') {
       player.playbackRate = ttsRate;
       let hasEnded = false;
       let hasStartedPlaying = false;
@@ -2441,6 +2441,10 @@
       player.onerror = (e) => {
         if (sessionToken !== currentTTSSessionToken) return;
         logApp("EDGE_PLAY_ERR", "Edge-TTS audio hiba", e);
+        if (textToSay) {
+          const isMaleVoice = voiceName.includes('Tamas') || voiceName.includes('Guy');
+          playNativeUtteranceWithVoice(textToSay, null, onEndedCallback, sessionToken, isMaleVoice ? 0.85 : 1.0);
+        }
       };
 
       try {
@@ -2456,10 +2460,10 @@
           if (err && (err.name === 'AbortError' || err.code === 20)) {
             return;
           }
-          logApp("PLAY_PROMISE_ERR", "Lejátszás nem indítható", err);
-          if (err && (err.name === 'NotAllowedError' || err.name === 'SecurityError')) {
-            pauseTTS();
-            showToast("Érintsd meg a Lejátszás gombot a hang elindításához!");
+          logApp("PLAY_PROMISE_ERR", "Lejátszás hiba, fallback rendszerhangra", err);
+          if (textToSay) {
+            const isMaleVoice = voiceName.includes('Tamas') || voiceName.includes('Guy');
+            playNativeUtteranceWithVoice(textToSay, null, onEndedCallback, sessionToken, isMaleVoice ? 0.85 : 1.0);
           }
         });
       }
@@ -2685,8 +2689,25 @@
       // 1. MICROSOFT AZURE & EDGE NEURAL TTS MOTOR (ELSŐDLEGES & ALAPÉRTELMEZETT)
       if (selectedEdgeVoice.startsWith('edge-')) {
         if (isJump) {
-          // Manuális ugrás esetén teljes leállítás és standby puffer törlése (mivel az elavult mondatra mutat)
-          stopAudioPlayback();
+          // Manuális ugrás: Standby puffer ürítése (mivel az elavult pozícióra mutat), események leválasztása
+          if (standbyBlobUrl) {
+            URL.revokeObjectURL(standbyBlobUrl);
+            standbyBlobUrl = null;
+          }
+          standbySentenceIdx = -1;
+          clearTimeout(playbackSafetyTimeout);
+          clearInterval(audioWatchdogInterval);
+          if (activePlayer) {
+            activePlayer.onended = null;
+            activePlayer.onerror = null;
+            activePlayer.ontimeupdate = null;
+          }
+          if (standbyPlayer) {
+            standbyPlayer.pause();
+            standbyPlayer.onended = null;
+            standbyPlayer.onerror = null;
+            standbyPlayer.ontimeupdate = null;
+          }
         } else {
           // Normál szekvenciális léptetés: csak az aktív lejátszó eseményeit töröljük, standby puffer megmarad
           softStopActivePlayer();
