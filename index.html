@@ -2164,18 +2164,6 @@
         sebesseg: ttsRate,
         szunet: sentenceDelay
       });
-      
-      // iOS Safari Audio csatorna feloldása / unlock a felhasználói gesztusban
-      const silentAudio = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
-      if (playerA && (!playerA.src || playerA.src === '')) {
-        playerA.src = silentAudio;
-        playerA.play().catch(() => {});
-      }
-      if (playerB && (!playerB.src || playerB.src === '')) {
-        playerB.src = silentAudio;
-        playerB.play().catch(() => {});
-      }
-      
       speakSentence(true);
     }
 
@@ -2444,16 +2432,15 @@
         if (sessionToken !== currentTTSSessionToken || hasEnded || !hasStartedPlaying) return;
         const dur = player.duration;
         const curr = player.currentTime;
-        // iOS Safari: Csak akkor fejezzük be, ha a lejátszás már ténylegesen elindult és elérte a legvégét
-        if (dur > 0.4 && isFinite(dur) && curr > 0.2 && curr >= dur - 0.02) {
+        // Csak akkor zárjuk le, ha a lejátszás már ténylegesen elindult és elérte a legvégét
+        if (dur > 0.5 && isFinite(dur) && curr > 0.2 && curr >= dur - 0.02) {
           safeEnd();
         }
       };
 
-      player.onerror = () => {
+      player.onerror = (e) => {
         if (sessionToken !== currentTTSSessionToken) return;
-        logApp("EDGE_PLAY_ERR", "Edge-TTS audio lejátszási hiba");
-        safeEnd();
+        logApp("EDGE_PLAY_ERR", "Edge-TTS audio hiba", e);
       };
 
       try {
@@ -2462,13 +2449,18 @@
 
       const playPromise = player.play();
       if (playPromise !== undefined) {
-        playPromise.catch(err => {
+        playPromise.then(() => {
+          hasStartedPlaying = true;
+        }).catch(err => {
           if (sessionToken !== currentTTSSessionToken) return;
           if (err && (err.name === 'AbortError' || err.code === 20)) {
             return;
           }
-          logApp("PLAY_PROMISE_ERR", "Lejátszás hiba (iOS)", err);
-          safeEnd();
+          logApp("PLAY_PROMISE_ERR", "Lejátszás nem indítható", err);
+          if (err && (err.name === 'NotAllowedError' || err.name === 'SecurityError')) {
+            pauseTTS();
+            showToast("Érintsd meg a Lejátszás gombot a hang elindításához!");
+          }
         });
       }
 
