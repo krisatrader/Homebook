@@ -199,6 +199,9 @@
       <button onclick="toggleSearchModal()" class="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-slate-700/50 text-slate-300 hover:text-white flex items-center justify-center text-sm active:scale-95 transition" title="Keresés a könyvben">
         🔍
       </button>
+      <button onclick="toggleOfflineModal()" class="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-indigo-600/20 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-600/30 flex items-center justify-center text-sm active:scale-95 transition" title="Offline Hangoskönyv Letöltő (v3.0)">
+        📥
+      </button>
       <button id="btn-translate-all" onclick="translateCurrentContent()" class="hidden sm:flex px-2.5 py-1.5 rounded-xl bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 font-medium text-xs items-center gap-1 active:scale-95 transition" title="Teljes szöveg fordítása magyarra">
         <span>🇭🇺</span> <span>Fordítás</span>
       </button>
@@ -362,18 +365,22 @@
       </div>
 
       <!-- Gyorsműveletek sáv a menü alján -->
-      <div class="pt-3 border-t border-slate-700/80 grid grid-cols-3 gap-1.5 shrink-0 text-center">
+      <div class="pt-3 border-t border-slate-700/80 grid grid-cols-4 gap-1 shrink-0 text-center">
+        <button onclick="toggleOfflineModal(); toggleDrawer();" class="p-2 bg-indigo-950/60 hover:bg-indigo-900/80 border border-indigo-500/30 rounded-xl text-indigo-300 hover:text-white flex flex-col items-center gap-1 transition" title="Offline Letöltés">
+          <span class="text-sm">📥</span>
+          <span class="text-[9px] font-bold">Letöltés</span>
+        </button>
         <button onclick="addBookmark(); toggleDrawer();" class="p-2 bg-slate-900/60 hover:bg-slate-700 rounded-xl text-slate-300 hover:text-white flex flex-col items-center gap-1 transition" title="Könyvjelző">
           <span class="text-sm">🔖</span>
-          <span class="text-[10px] font-semibold">Könyvjelző</span>
+          <span class="text-[9px] font-semibold">Könyvjelző</span>
         </button>
         <button onclick="translateCurrentContent(); toggleDrawer();" class="p-2 bg-slate-900/60 hover:bg-slate-700 rounded-xl text-slate-300 hover:text-white flex flex-col items-center gap-1 transition" title="Fordítás">
           <span class="text-sm">🇭🇺</span>
-          <span class="text-[10px] font-semibold">Fordítás</span>
+          <span class="text-[9px] font-semibold">Fordítás</span>
         </button>
         <button onclick="toggleDiagnosticsModal(); toggleDrawer();" class="p-2 bg-slate-900/60 hover:bg-slate-700 rounded-xl text-slate-300 hover:text-white flex flex-col items-center gap-1 transition" title="Rendszernapló">
           <span class="text-sm">📋</span>
-          <span class="text-[10px] font-semibold">Logok</span>
+          <span class="text-[9px] font-semibold">Logok</span>
         </button>
       </div>
     </div>
@@ -430,8 +437,12 @@
       </div>
     </div>
 
-    <!-- GYORS GOMBOK (SEBESSÉG & IDŐZÍTŐ) -->
+    <!-- GYORS GOMBOK (SEBESSÉG, IDŐZÍTŐ & OFFLINE) -->
     <div class="flex items-center gap-1 sm:gap-1.5 shrink-0">
+      <button onclick="toggleOfflineModal()" id="btn-player-offline" class="px-2 py-1.5 rounded-xl bg-slate-700/80 hover:bg-slate-600 text-xs font-bold text-slate-300 active:scale-95 transition flex items-center gap-0.5" title="Offline Hangoskönyv Letöltő (v3.0)">
+        📥<span id="lbl-player-offline-status" class="hidden sm:inline ml-0.5 text-[10px]">Offline</span>
+      </button>
+
       <button onclick="toggleSleepTimerModal()" id="btn-sleep-timer" class="px-2 py-1.5 rounded-xl bg-slate-700/80 text-xs font-bold text-slate-300 hover:bg-slate-600 active:scale-95 transition flex items-center gap-0.5" title="Elalvási időzítő">
         🌙<span id="lbl-sleep-timer-btn" class="hidden sm:inline ml-0.5">Ki</span>
       </button>
@@ -439,6 +450,59 @@
       <button onclick="changeTTSSpeedShortcut()" id="btn-speed" class="px-2 py-1.5 rounded-xl bg-indigo-600/20 text-indigo-300 border border-indigo-500/30 text-xs font-bold hover:bg-indigo-600/30 active:scale-95 transition" title="Felolvasási sebesség">
         1.0x
       </button>
+    </div>
+  </div>
+
+  <!-- OFFLINE HANGOSKÖNYV KEZELŐ MODAL (v3.0) -->
+  <div id="offline-modal" class="fixed inset-0 bg-black/70 backdrop-blur-md z-50 opacity-0 pointer-events-none transition-opacity duration-300 flex items-center justify-center p-4">
+    <div class="bg-slate-800 border border-indigo-500/40 w-full max-w-md rounded-3xl p-6 space-y-4 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-slate-700 pb-3">
+        <div class="flex items-center gap-2">
+          <span class="text-xl">📥</span>
+          <div>
+            <h3 class="font-bold text-sm text-white">Offline Hangoskönyv Letöltő</h3>
+            <p class="text-[10px] text-indigo-300 font-medium">Homebook Pro v3.0 Offline Engine</p>
+          </div>
+        </div>
+        <button onclick="toggleOfflineModal()" class="w-7 h-7 rounded-full bg-slate-700 text-slate-400 flex items-center justify-center hover:text-white text-xs">✕</button>
+      </div>
+
+      <div class="p-3.5 bg-slate-900/90 rounded-2xl border border-slate-700/60 space-y-2.5">
+        <div class="flex items-center justify-between">
+          <span id="offline-modal-book-title" class="text-xs font-bold text-slate-200 truncate max-w-[200px]">Könyv betöltése...</span>
+          <span id="offline-modal-badge" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-slate-400 border border-slate-700 shrink-0">⚪ Nincs letöltve</span>
+        </div>
+
+        <div class="space-y-1">
+          <div class="flex justify-between text-[11px]">
+            <span id="offline-modal-status-txt" class="text-slate-300">Készen áll</span>
+            <span id="offline-modal-pct-txt" class="font-mono font-bold text-indigo-400">0%</span>
+          </div>
+          <div class="w-full bg-slate-800 rounded-full h-2.5 overflow-hidden border border-slate-700/60">
+            <div id="offline-modal-progressbar" class="bg-gradient-to-r from-indigo-500 via-purple-500 to-emerald-400 h-full transition-all duration-300" style="width: 0%"></div>
+          </div>
+          <div class="flex justify-between text-[10px] text-slate-400 font-medium pt-0.5">
+            <span id="offline-modal-count">0 / 0 mondat</span>
+            <span id="offline-modal-size">~0 MB</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-2 pt-1">
+        <button type="button" id="btn-offline-modal-start" onclick="toggleOfflineBookDownload()" class="py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition active:scale-95 shadow-md shadow-indigo-600/30">
+          <span>📥</span> <span id="lbl-offline-modal-btn">Teljes Könyv Letöltése</span>
+        </button>
+        <button type="button" onclick="clearOfflineBookAudioCache()" class="py-2.5 bg-slate-900 hover:bg-rose-900/30 text-slate-300 hover:text-rose-300 border border-slate-700 hover:border-rose-700/50 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 transition active:scale-95">
+          <span>🗑️</span> <span>Tárhely Törlése</span>
+        </button>
+      </div>
+
+      <div class="p-3 bg-slate-900/50 rounded-xl border border-slate-700/40 text-[11px] text-slate-400 space-y-1">
+        <div class="font-semibold text-indigo-300 flex items-center gap-1"><span>✈️</span> 100% Offline Használat</div>
+        <p class="text-[10px] leading-relaxed">A letöltött könyvek repülőn, metrón vagy külföldön is 0ms késleltetéssel, mobilnet nélkül hallgathatók.</p>
+      </div>
+
+      <button onclick="toggleOfflineModal()" class="w-full py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-xl text-xs font-semibold transition">Bezárás</button>
     </div>
   </div>
 
@@ -3036,53 +3100,134 @@
       updateOfflineDownloadUI(cachedCount, totalSentences, estMB, isOfflineDownloading);
     }
 
+    function toggleOfflineModal() {
+      const modal = document.getElementById('offline-modal');
+      if (modal.classList.contains('opacity-0')) {
+        modal.classList.remove('opacity-0', 'pointer-events-none');
+        checkCurrentBookOfflineStatus();
+        logApp("UI_MODAL", "Offline letöltő ablak megnyitva");
+      } else {
+        modal.classList.add('opacity-0', 'pointer-events-none');
+      }
+    }
+
     function updateOfflineDownloadUI(cached, total, sizeMB, downloading) {
-      const badge = document.getElementById('offline-download-badge');
-      const statusTxt = document.getElementById('offline-download-status-txt');
-      const pctTxt = document.getElementById('offline-download-pct-txt');
-      const pbar = document.getElementById('offline-download-progressbar');
-      const countElem = document.getElementById('offline-download-count');
-      const sizeElem = document.getElementById('offline-download-size');
-      const btnLbl = document.getElementById('lbl-offline-download-btn');
-      const startBtn = document.getElementById('btn-offline-download-start');
+      // 1. Beállítások modal elemek
+      const badge1 = document.getElementById('offline-download-badge');
+      const statusTxt1 = document.getElementById('offline-download-status-txt');
+      const pctTxt1 = document.getElementById('offline-download-pct-txt');
+      const pbar1 = document.getElementById('offline-download-progressbar');
+      const countElem1 = document.getElementById('offline-download-count');
+      const sizeElem1 = document.getElementById('offline-download-size');
+      const btnLbl1 = document.getElementById('lbl-offline-download-btn');
+      const startBtn1 = document.getElementById('btn-offline-download-start');
+
+      // 2. Különálló Offline modal elemek
+      const titleElem2 = document.getElementById('offline-modal-book-title');
+      const badge2 = document.getElementById('offline-modal-badge');
+      const statusTxt2 = document.getElementById('offline-modal-status-txt');
+      const pctTxt2 = document.getElementById('offline-modal-pct-txt');
+      const pbar2 = document.getElementById('offline-modal-progressbar');
+      const countElem2 = document.getElementById('offline-modal-count');
+      const sizeElem2 = document.getElementById('offline-modal-size');
+      const btnLbl2 = document.getElementById('lbl-offline-modal-btn');
+      const startBtn2 = document.getElementById('btn-offline-modal-start');
+
+      // 3. Lejátszó sáv gomb
+      const playerLbl = document.getElementById('lbl-player-offline-status');
+      const playerBtn = document.getElementById('btn-player-offline');
+
+      if (titleElem2 && book) titleElem2.innerText = book.title || "Könyv";
 
       if (!total || total === 0) {
-        if (badge) { badge.className = "px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-slate-400 border border-slate-700 shrink-0"; badge.innerText = "⚪ Nincs könyv"; }
-        if (statusTxt) statusTxt.innerText = "Nincs aktív könyv betöltve";
-        if (pctTxt) pctTxt.innerText = "0%";
-        if (pbar) pbar.style.width = "0%";
-        if (countElem) countElem.innerText = "0 / 0 mondat";
-        if (sizeElem) sizeElem.innerText = "~0 MB";
+        const noBookBadge = "⚪ Nincs könyv";
+        if (badge1) { badge1.className = "px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-slate-400 border border-slate-700 shrink-0"; badge1.innerText = noBookBadge; }
+        if (badge2) { badge2.className = "px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-slate-400 border border-slate-700 shrink-0"; badge2.innerText = noBookBadge; }
+        if (statusTxt1) statusTxt1.innerText = "Nincs aktív könyv betöltve";
+        if (statusTxt2) statusTxt2.innerText = "Nincs aktív könyv betöltve";
+        if (pctTxt1) pctTxt1.innerText = "0%";
+        if (pctTxt2) pctTxt2.innerText = "0%";
+        if (pbar1) pbar1.style.width = "0%";
+        if (pbar2) pbar2.style.width = "0%";
+        if (countElem1) countElem1.innerText = "0 / 0 mondat";
+        if (countElem2) countElem2.innerText = "0 / 0 mondat";
+        if (sizeElem1) sizeElem1.innerText = "~0 MB";
+        if (sizeElem2) sizeElem2.innerText = "~0 MB";
+        if (playerLbl) playerLbl.innerText = "Offline";
         return;
       }
 
       const pct = Math.min(100, Math.round((cached / total) * 100));
 
-      if (pctTxt) pctTxt.innerText = `${pct}%`;
-      if (pbar) pbar.style.width = `${pct}%`;
-      if (countElem) countElem.innerText = `${cached} / ${total} mondat`;
-      if (sizeElem) sizeElem.innerText = `~${sizeMB} MB`;
+      if (pctTxt1) pctTxt1.innerText = `${pct}%`;
+      if (pctTxt2) pctTxt2.innerText = `${pct}%`;
+      if (pbar1) pbar1.style.width = `${pct}%`;
+      if (pbar2) pbar2.style.width = `${pct}%`;
+      if (countElem1) countElem1.innerText = `${cached} / ${total} mondat`;
+      if (countElem2) countElem2.innerText = `${cached} / ${total} mondat`;
+      if (sizeElem1) sizeElem1.innerText = `~${sizeMB} MB`;
+      if (sizeElem2) sizeElem2.innerText = `~${sizeMB} MB`;
 
       if (downloading) {
-        if (badge) { badge.className = "px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 shrink-0 animate-pulse"; badge.innerText = `🟡 Letöltés (${pct}%)`; }
-        if (statusTxt) statusTxt.innerText = `Letöltés folyamatban: ${cached}/${total}...`;
-        if (btnLbl) btnLbl.innerText = "Szüneteltetés";
-        if (startBtn) startBtn.className = "py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition active:scale-95 shadow-md shadow-amber-600/30";
+        const dBadge = `🟡 Letöltés (${pct}%)`;
+        const dClass = "px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 shrink-0 animate-pulse";
+        if (badge1) { badge1.className = dClass; badge1.innerText = dBadge; }
+        if (badge2) { badge2.className = dClass; badge2.innerText = dBadge; }
+        const dStatus = `Letöltés folyamatban: ${cached}/${total}...`;
+        if (statusTxt1) statusTxt1.innerText = dStatus;
+        if (statusTxt2) statusTxt2.innerText = dStatus;
+        if (btnLbl1) btnLbl1.innerText = "Szüneteltetés";
+        if (btnLbl2) btnLbl2.innerText = "Szüneteltetés";
+        const btnClass = "py-2.5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition active:scale-95 shadow-md shadow-amber-600/30";
+        if (startBtn1) startBtn1.className = btnClass;
+        if (startBtn2) startBtn2.className = btnClass;
+        if (playerLbl) playerLbl.innerText = `${pct}%`;
+        if (playerBtn) playerBtn.className = "px-2 py-1.5 rounded-xl bg-amber-600/30 border border-amber-500/50 text-xs font-bold text-amber-300 active:scale-95 transition flex items-center gap-0.5 animate-pulse";
       } else if (pct >= 100) {
-        if (badge) { badge.className = "px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shrink-0"; badge.innerText = "🟢 Letöltve (100%)"; }
-        if (statusTxt) statusTxt.innerText = "A teljes könyv 100%-ban offline elérhető!";
-        if (btnLbl) btnLbl.innerText = "Újraellenőrzés";
-        if (startBtn) startBtn.className = "py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition active:scale-95 shadow-md shadow-emerald-600/30";
+        const cBadge = "🟢 Letöltve (100%)";
+        const cClass = "px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shrink-0";
+        if (badge1) { badge1.className = cClass; badge1.innerText = cBadge; }
+        if (badge2) { badge2.className = cClass; badge2.innerText = cBadge; }
+        const cStatus = "A teljes könyv 100%-ban offline elérhető!";
+        if (statusTxt1) statusTxt1.innerText = cStatus;
+        if (statusTxt2) statusTxt2.innerText = cStatus;
+        if (btnLbl1) btnLbl1.innerText = "Újraellenőrzés";
+        if (btnLbl2) btnLbl2.innerText = "Újraellenőrzés";
+        const btnClass = "py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition active:scale-95 shadow-md shadow-emerald-600/30";
+        if (startBtn1) startBtn1.className = btnClass;
+        if (startBtn2) startBtn2.className = btnClass;
+        if (playerLbl) playerLbl.innerText = "100%";
+        if (playerBtn) playerBtn.className = "px-2 py-1.5 rounded-xl bg-emerald-600/20 border border-emerald-500/30 text-xs font-bold text-emerald-400 active:scale-95 transition flex items-center gap-0.5";
       } else if (cached > 0) {
-        if (badge) { badge.className = "px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30 shrink-0"; badge.innerText = `🔵 Részben kész (${pct}%)`; }
-        if (statusTxt) statusTxt.innerText = `Szüneteltetve: ${cached}/${total} mondat kész`;
-        if (btnLbl) btnLbl.innerText = "Letöltés Folytatása";
-        if (startBtn) startBtn.className = "py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition active:scale-95 shadow-md shadow-indigo-600/30";
+        const pBadge = `🔵 Részben kész (${pct}%)`;
+        const pClass = "px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30 shrink-0";
+        if (badge1) { badge1.className = pClass; badge1.innerText = pBadge; }
+        if (badge2) { badge2.className = pClass; badge2.innerText = pBadge; }
+        const pStatus = `Szüneteltetve: ${cached}/${total} mondat kész`;
+        if (statusTxt1) statusTxt1.innerText = pStatus;
+        if (statusTxt2) statusTxt2.innerText = pStatus;
+        if (btnLbl1) btnLbl1.innerText = "Letöltés Folytatása";
+        if (btnLbl2) btnLbl2.innerText = "Letöltés Folytatása";
+        const btnClass = "py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition active:scale-95 shadow-md shadow-indigo-600/30";
+        if (startBtn1) startBtn1.className = btnClass;
+        if (startBtn2) startBtn2.className = btnClass;
+        if (playerLbl) playerLbl.innerText = `${pct}%`;
+        if (playerBtn) playerBtn.className = "px-2 py-1.5 rounded-xl bg-indigo-600/20 border border-indigo-500/30 text-xs font-bold text-indigo-300 active:scale-95 transition flex items-center gap-0.5";
       } else {
-        if (badge) { badge.className = "px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-slate-400 border border-slate-700 shrink-0"; badge.innerText = "⚪ Nincs letöltve"; }
-        if (statusTxt) statusTxt.innerText = "Készen áll a háttérbeli letöltésre";
-        if (btnLbl) btnLbl.innerText = "Letöltés Indítása";
-        if (startBtn) startBtn.className = "py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition active:scale-95 shadow-md shadow-indigo-600/30";
+        const nBadge = "⚪ Nincs letöltve";
+        const nClass = "px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-slate-400 border border-slate-700 shrink-0";
+        if (badge1) { badge1.className = nClass; badge1.innerText = nBadge; }
+        if (badge2) { badge2.className = nClass; badge2.innerText = nBadge; }
+        const nStatus = "Készen áll a háttérbeli letöltésre";
+        if (statusTxt1) statusTxt1.innerText = nStatus;
+        if (statusTxt2) statusTxt2.innerText = nStatus;
+        if (btnLbl1) btnLbl1.innerText = "Teljes Könyv Letöltése";
+        if (btnLbl2) btnLbl2.innerText = "Teljes Könyv Letöltése";
+        const btnClass = "py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition active:scale-95 shadow-md shadow-indigo-600/30";
+        if (startBtn1) startBtn1.className = btnClass;
+        if (startBtn2) startBtn2.className = btnClass;
+        if (playerLbl) playerLbl.innerText = "Offline";
+        if (playerBtn) playerBtn.className = "px-2 py-1.5 rounded-xl bg-slate-700/80 hover:bg-slate-600 text-xs font-bold text-slate-300 active:scale-95 transition flex items-center gap-0.5";
       }
     }
 
