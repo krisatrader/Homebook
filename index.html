@@ -1925,7 +1925,7 @@
         if (currSent) currSent.innerText = item.text;
 
         if (isSpeaking) {
-          speakSentence();
+          speakSentence(true);
         } else {
           highlightTTSSentence(item);
         }
@@ -2280,8 +2280,8 @@
       }
     }
 
-    async function playEdgeNeuralTTS(textToSay, voiceCode, onEndedCallback) {
-      const sessionToken = currentTTSSessionToken;
+    async function playEdgeNeuralTTS(textToSay, voiceCode, onEndedCallback, sessionToken) {
+      if (!sessionToken) sessionToken = currentTTSSessionToken;
       const voiceName = voiceCode.replace('edge-', '');
 
       // Nyelvkód meghatározása a választott hangból
@@ -2325,6 +2325,7 @@
       const cachedBlob = await dbGetAudioCache(cacheKey);
 
       if (cachedBlob && cachedBlob.size > 100) {
+        if (sessionToken !== currentTTSSessionToken || !isSpeaking) return;
         if (currentAudioBlobUrl) {
           URL.revokeObjectURL(currentAudioBlobUrl);
         }
@@ -2363,6 +2364,8 @@
         logApp("EDGE_TTS_BACKEND_ERR", `Edge-TTS szerver hiba (${baseUrl}), átváltás rendszerhangra`, err);
       }
 
+      if (sessionToken !== currentTTSSessionToken || !isSpeaking) return;
+
       // 5. Fallback helyi rendszerhangra ha hálózati hiba történne
       const isMaleVoice = voiceName.includes('Tamas') || voiceName.includes('Guy');
       logApp("EDGE_SYNTH_FALLBACK", `Safari/Helyi hang szintézis: ${voiceName}`);
@@ -2395,11 +2398,16 @@
       };
 
       player.onerror = () => {
+        if (sessionToken !== currentTTSSessionToken) return;
         logApp("EDGE_PLAY_ERR", "Edge-TTS audio lejátszási hiba");
         safeEnd();
       };
 
       player.play().catch(err => {
+        if (sessionToken !== currentTTSSessionToken) return;
+        if (err && (err.name === 'AbortError' || err.code === 20)) {
+          return;
+        }
         logApp("PLAY_PROMISE_ERR", "Lejátszás hiba", err);
         safeEnd();
       });
@@ -2584,6 +2592,9 @@
 
       if (checkChapterEndSleepTimer()) return;
 
+      currentTTSSessionToken++;
+      const sessionToken = currentTTSSessionToken;
+
       const item = ttsSentences[currentSentenceIdx];
       lastSeenPIdx = item.pIdx;
       book.lastSeenPIdx = item.pIdx;
@@ -2598,6 +2609,7 @@
       if (currSent) currSent.innerText = item.text;
 
       const proceedToNext = () => {
+        if (sessionToken !== currentTTSSessionToken) return;
         clearTimeout(playbackSafetyTimeout);
         clearInterval(audioWatchdogInterval);
         clearTimeout(window.speechWatchdog);
@@ -2607,21 +2619,30 @@
         currentSentenceIdx++;
         saveReadingProgressToLocal();
         if (sentenceDelay > 0) {
-          setTimeout(() => speakSentence(), sentenceDelay * 1000);
+          setTimeout(() => {
+            if (sessionToken === currentTTSSessionToken && isSpeaking) {
+              speakSentence(false);
+            }
+          }, sentenceDelay * 1000);
         } else {
-          speakSentence();
+          speakSentence(false);
         }
       };
 
       // 1. MICROSOFT AZURE & EDGE NEURAL TTS MOTOR (ELSŐDLEGES & ALAPÉRTELMEZETT)
       if (selectedEdgeVoice.startsWith('edge-')) {
-        // Soft stop: csak az aktív lejátszó eseményeit töröljük, a standby puffer érintetlen marad!
-        softStopActivePlayer();
+        if (isJump) {
+          // Manuális ugrás esetén teljes leállítás és standby puffer törlése (mivel az elavult mondatra mutat)
+          stopAudioPlayback();
+        } else {
+          // Normál szekvenciális léptetés: csak az aktív lejátszó eseményeit töröljük, standby puffer megmarad
+          softStopActivePlayer();
+        }
         synth.cancel();
         const isTamas = selectedEdgeVoice.includes('Tamas');
         const statElem = document.getElementById('tts-status');
         if (statElem) statElem.innerText = `🌟 ${isTamas ? 'Tamás (Férfi)' : 'Noémi (Női)'}: ${currentSentenceIdx + 1}/${ttsSentences.length}`;
-        playEdgeNeuralTTS(item.text, selectedEdgeVoice, proceedToNext);
+        playEdgeNeuralTTS(item.text, selectedEdgeVoice, proceedToNext, sessionToken);
         return;
       }
 
@@ -2637,7 +2658,7 @@
       if (statElem) statElem.innerText = `📱 ${voiceName}: ${currentSentenceIdx + 1}/${ttsSentences.length}`;
 
       setTimeout(() => {
-        if (!isSpeaking) return;
+        if (!isSpeaking || sessionToken !== currentTTSSessionToken) return;
 
         const utter = new SpeechSynthesisUtterance(item.text);
         if (isSystemHungarian) {
@@ -2654,7 +2675,7 @@
 
         let hasEnded = false;
         const safeEnd = () => {
-          if (hasEnded) return;
+          if (hasEnded || sessionToken !== currentTTSSessionToken) return;
           hasEnded = true;
           logApp("TTS_NATIVE_DONE", `Natív mondat befejezve: ${voiceName}`);
           proceedToNext();
