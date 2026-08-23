@@ -1334,7 +1334,19 @@
         
         p.onclick = () => {
           if (window.getSelection().toString().trim().length === 0) {
+            logApp("READER_PARA_CLICK", `Bekezdés kiválasztva: #para-${idx}`, { snippet: pText.substring(0, 35) });
             scrollToParagraph(idx, true, true);
+            
+            // Bekezdésre kattintáskor azonnal induljon el a felolvasás
+            if (!isSpeaking) {
+              isSpeaking = true;
+              document.getElementById('btn-play-pause').innerText = '⏸';
+              // Szinkron Safari Audio csatorna feloldás a felhasználói kattintásban
+              const silentAudio = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
+              if (playerA) { playerA.src = silentAudio; playerA.play().catch(() => {}); }
+              if (playerB) { playerB.src = silentAudio; playerB.play().catch(() => {}); }
+            }
+            speakSentence(true);
           }
         };
 
@@ -1689,7 +1701,7 @@
         if (isSpeaking && !isProgrammaticScroll) {
           if (e.touches && e.touches.length > 0) {
             const diff = Math.abs(e.touches[0].clientY - touchStartY);
-            if (diff > 18) { // Érdemi kézi elmozdulás
+            if (diff > 40) { // Valódi határozott kézi húzási szándék
               pauseTTS();
               const now = Date.now();
               if (now - lastPauseToast > 3000) {
@@ -1702,7 +1714,7 @@
       }, { passive: true });
 
       container.addEventListener('wheel', (e) => {
-        if (isSpeaking && !isProgrammaticScroll && Math.abs(e.deltaY) > 8) {
+        if (isSpeaking && !isProgrammaticScroll && Math.abs(e.deltaY) > 35) {
           pauseTTS();
           const now = Date.now();
           if (now - lastPauseToast > 3000) {
@@ -2806,7 +2818,7 @@
           pElem.scrollIntoView({ behavior: 'smooth', block: 'center' });
           setTimeout(() => {
             isProgrammaticScroll = false;
-          }, 300);
+          }, 700);
         }
       }
     }
