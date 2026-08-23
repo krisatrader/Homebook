@@ -17,6 +17,7 @@ import json
 import asyncio
 import mimetypes
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from socketserver import ThreadingMixIn
 from urllib.parse import urlparse, parse_qs
 
 try:
@@ -228,14 +229,19 @@ class HomebookServerHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(b'{"error": "Szintezis hiba"}')
 
+class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
+    """Párhuzamos kéréskezelés – minden TTS kérés saját szálban fut (0ms standby blokkolás)."""
+    daemon_threads = True
+
 def run_server():
     print("=" * 60)
     print("🌟 HOMEBOOK PRO - EDGE NEURAL TTS & WEB APP SZERVER")
     print(f"📡 Cím: http://localhost:{PORT}")
     print("📖 Web UI: http://localhost:{PORT}/")
     print("🎙️ Motor: Microsoft Edge-TTS (Tamás & Noémi)")
+    print("⚡ Mód: Párhuzamos (ThreadedHTTPServer)")
     print("=" * 60)
-    server = HTTPServer(("0.0.0.0", PORT), HomebookServerHandler)
+    server = ThreadedHTTPServer(("0.0.0.0", PORT), HomebookServerHandler)
     server.serve_forever()
 
 if __name__ == "__main__":
