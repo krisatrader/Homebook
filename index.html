@@ -1941,10 +1941,10 @@
         rawSentences.forEach(s => {
           const trimmed = s.trim();
           if (trimmed.length > 0) {
-            if (trimmed.length <= 220) {
+            if (trimmed.length <= 500) {
               ttsSentences.push({ text: trimmed, pIdx });
             } else {
-              const subChunks = splitLongTextIntoChunks(trimmed, 220);
+              const subChunks = splitLongTextIntoChunks(trimmed, 500);
               subChunks.forEach(chunk => {
                 ttsSentences.push({ text: chunk, pIdx });
               });
@@ -1954,7 +1954,7 @@
       });
     }
 
-    function splitLongTextIntoChunks(text, maxLength = 220) {
+    function splitLongTextIntoChunks(text, maxLength = 500) {
       const chunks = [];
       let remaining = text;
 
