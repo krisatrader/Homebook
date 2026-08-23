@@ -939,7 +939,17 @@
     
     // A/B DUPLA LEJÁTSZÓ PUFFER (PING-PONG DOUBLE BUFFERING)
     let playerA = new Audio();
+    playerA.playsInline = true;
+    playerA.setAttribute('playsinline', '');
+    playerA.setAttribute('webkit-playsinline', '');
+    playerA.preload = 'auto';
+
     let playerB = new Audio();
+    playerB.playsInline = true;
+    playerB.setAttribute('playsinline', '');
+    playerB.setAttribute('webkit-playsinline', '');
+    playerB.preload = 'auto';
+
     let activePlayer = playerA;
     let standbyPlayer = playerB;
     let activePlayerId = 'A';
@@ -2155,13 +2165,15 @@
         szunet: sentenceDelay
       });
       
-      if (playerA) {
+      // iOS Safari Audio csatorna feloldása / unlock a felhasználói gesztusban
+      const silentAudio = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
+      if (playerA && (!playerA.src || playerA.src === '')) {
+        playerA.src = silentAudio;
         playerA.play().catch(() => {});
-        playerA.pause();
       }
-      if (playerB) {
+      if (playerB && (!playerB.src || playerB.src === '')) {
+        playerB.src = silentAudio;
         playerB.play().catch(() => {});
-        playerB.pause();
       }
       
       speakSentence(true);
@@ -2411,6 +2423,7 @@
     function setupPlayerEventsAndPlay(player, onEndedCallback, sessionToken, voiceName) {
       player.playbackRate = ttsRate;
       let hasEnded = false;
+      let hasStartedPlaying = false;
 
       const safeEnd = () => {
         if (hasEnded || sessionToken !== currentTTSSessionToken) return;
@@ -2422,11 +2435,17 @@
       };
 
       player.onended = safeEnd;
+
+      player.onplaying = () => {
+        hasStartedPlaying = true;
+      };
+
       player.ontimeupdate = () => {
-        if (sessionToken !== currentTTSSessionToken || hasEnded) return;
+        if (sessionToken !== currentTTSSessionToken || hasEnded || !hasStartedPlaying) return;
         const dur = player.duration;
         const curr = player.currentTime;
-        if (dur > 0 && isFinite(dur) && curr >= dur - 0.08) {
+        // iOS Safari: Csak akkor fejezzük be, ha a lejátszás már ténylegesen elindult és elérte a legvégét
+        if (dur > 0.4 && isFinite(dur) && curr > 0.2 && curr >= dur - 0.02) {
           safeEnd();
         }
       };
@@ -2437,14 +2456,21 @@
         safeEnd();
       };
 
-      player.play().catch(err => {
-        if (sessionToken !== currentTTSSessionToken) return;
-        if (err && (err.name === 'AbortError' || err.code === 20)) {
-          return;
-        }
-        logApp("PLAY_PROMISE_ERR", "Lejátszás hiba", err);
-        safeEnd();
-      });
+      try {
+        player.currentTime = 0;
+      } catch(e) {}
+
+      const playPromise = player.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(err => {
+          if (sessionToken !== currentTTSSessionToken) return;
+          if (err && (err.name === 'AbortError' || err.code === 20)) {
+            return;
+          }
+          logApp("PLAY_PROMISE_ERR", "Lejátszás hiba (iOS)", err);
+          safeEnd();
+        });
+      }
 
       logApp("TTS_PLAYING", `Microsoft Edge-TTS lejátszás elindult: ${voiceName} (Player ${activePlayerId})`);
     }
@@ -2485,6 +2511,7 @@
           standbySentenceIdx = nextSentenceIdx;
           standbyPlayer.src = standbyBlobUrl;
           standbyPlayer.playbackRate = ttsRate;
+          try { standbyPlayer.currentTime = 0; } catch(e) {}
           standbyPlayer.load();
           logApp("STANDBY_READY", `⚡ Standby Player (${activePlayerId === 'A' ? 'B' : 'A'}) előkészítve mondat #${nextSentenceIdx + 1}`);
         }
