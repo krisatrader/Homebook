@@ -152,7 +152,7 @@
     </div>
   </div>
 
-  <div id="confirm-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 opacity-0 pointer-events-none transition-opacity duration-300 flex items-center justify-center p-4">
+  <div id="confirm-modal" class="fixed inset-0 bg-black/75 backdrop-blur-md z-[100] opacity-0 pointer-events-none transition-opacity duration-300 flex items-center justify-center p-4">
     <div class="bg-slate-800 border border-slate-700 w-full max-w-xs rounded-2xl p-5 space-y-4 shadow-2xl text-center">
       <h3 id="confirm-modal-text" class="text-xs font-bold text-slate-200">Biztosan folytatod?</h3>
       <div class="flex gap-2">
@@ -1602,7 +1602,7 @@
 
           <div class="flex justify-end gap-2 pt-2 border-t border-slate-800">
             <button onclick="loadBookFromLibrary('${b.id}'); toggleLibraryModal();" class="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold">Olvasás</button>
-            <button onclick="deleteBookFromLibrary('${b.id}', '${tab}')" class="px-2 py-1 text-rose-400 hover:bg-rose-500/20 rounded-lg text-xs">🗑️</button>
+            <button onclick="event.stopPropagation(); deleteBookFromLibrary('${b.id}', '${tab}')" class="px-2 py-1 text-rose-400 hover:bg-rose-500/20 rounded-lg text-xs" title="Könyv törlése">🗑️</button>
           </div>
         `;
 
@@ -1611,15 +1611,20 @@
     }
 
     function deleteBookFromLibrary(id, tab) {
-      if (myLibrary.length <= 1) {
-        showToast("Legalább egy könyvnek maradnia kell!");
-        return;
-      }
-      showConfirm("Biztosan törölni szeretnéd ezt a könyvet?", async () => {
+      const bookToDelete = myLibrary.find(b => b.id === id);
+      const title = bookToDelete ? bookToDelete.title : "ezt a könyvet";
+      showConfirm(`Biztosan törölni szeretnéd a(z) "${title}" könyvet?`, async () => {
         myLibrary = myLibrary.filter(b => b.id !== id);
         await dbDeleteBook(id);
         if (currentBookId === id) {
-          loadBookFromLibrary(myLibrary[0].id);
+          if (myLibrary.length > 0) {
+            loadBookFromLibrary(myLibrary[0].id);
+          } else {
+            currentBookId = null;
+            book = { title: "Nincs könyv", author: "", paragraphs: ["Húzz ide vagy tallózz be egy könyvet a Könyvtárból."], chapters: [] };
+            document.getElementById('app-title').innerText = "Homebook Pro";
+            renderBook();
+          }
         }
         renderMyBookshelf(tab);
         showToast("Könyv törölve.");
