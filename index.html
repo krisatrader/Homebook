@@ -404,6 +404,10 @@
         ▶
       </button>
 
+      <button id="btn-resume-last-position" onclick="resumeFromLastSavedPosition()" class="px-2.5 py-1.5 h-8 sm:h-9 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 hover:border-emerald-400 flex items-center justify-center gap-1 text-xs font-bold active:scale-95 transition shadow-sm" title="Ugrás az utolsó mentett/szinkronizált pozícióra és folytatás">
+        <span>📍</span> <span>Folytatás</span>
+      </button>
+
       <button onclick="nextChapter()" class="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-slate-700/70 hover:bg-slate-600 text-slate-200 flex items-center justify-center text-[10px] sm:text-xs font-bold active:scale-95 transition" title="Következő fejezet">
         ⏭
       </button>
@@ -1234,7 +1238,7 @@
 
     window.addEventListener('DOMContentLoaded', async () => {
       if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('./sw.js?v=9').then((reg) => {
+        navigator.serviceWorker.register('./sw.js?v=10').then((reg) => {
           reg.update().catch(() => {});
           reg.onupdatefound = () => {
             const installingWorker = reg.installing;
@@ -3226,6 +3230,68 @@
       } else {
         showToast("✅ Aktuális pozíciód elmentve a felhőbe!");
       }
+    }
+
+    async function resumeFromLastSavedPosition() {
+      if (!book || !book.paragraphs || book.paragraphs.length === 0) {
+        showToast("Nincs megnyitott könyv.");
+        return;
+      }
+
+      // 1. Felhőbeli legfrissebb pozíció ellenőrzése
+      let targetPIdx = book.lastSeenPIdx || 0;
+      let targetSIdx = (book.lastSeenSentenceIdx !== undefined) ? book.lastSeenSentenceIdx : 0;
+
+      if (navigator.onLine && book.title) {
+        try {
+          const remote = await pullProgressFromCloud(book.title, false);
+          if (remote && remote.lastSeenPIdx !== undefined) {
+            targetPIdx = remote.lastSeenPIdx;
+            targetSIdx = remote.lastSeenSentenceIdx || 0;
+          }
+        } catch(e) {}
+      }
+
+      // 2. Mondatlista felkészítése ha szükséges
+      if (!ttsSentences || ttsSentences.length === 0) {
+        prepareTTSData();
+      }
+
+      // 3. Pontos mondatindex kikeresése
+      let matchedSentenceIdx = -1;
+      if (ttsSentences && ttsSentences.length > 0) {
+        if (targetSIdx >= 0 && targetSIdx < ttsSentences.length && ttsSentences[targetSIdx].pIdx === targetPIdx) {
+          matchedSentenceIdx = targetSIdx;
+        } else {
+          matchedSentenceIdx = ttsSentences.findIndex(s => s.pIdx === targetPIdx);
+          if (matchedSentenceIdx === -1) {
+            matchedSentenceIdx = ttsSentences.findIndex(s => s.pIdx >= targetPIdx);
+          }
+        }
+      }
+
+      if (matchedSentenceIdx === -1) {
+        matchedSentenceIdx = Math.max(0, Math.min(ttsSentences.length - 1, targetSIdx));
+      }
+
+      currentSentenceIdx = matchedSentenceIdx;
+      lastSeenPIdx = targetPIdx;
+      book.lastSeenPIdx = targetPIdx;
+      book.lastSeenSentenceIdx = currentSentenceIdx;
+
+      // 4. Görgetés a bekezdéshez és mondat kiemelése
+      scrollToParagraph(targetPIdx, true, false);
+      if (ttsSentences[currentSentenceIdx]) {
+        highlightTTSSentence(ttsSentences[currentSentenceIdx], true);
+      }
+
+      // 5. Felolvasás indítása pontosan ettől a mondattól!
+      isSpeaking = true;
+      document.getElementById('btn-play-pause').innerText = '⏸';
+      speakSentence(true);
+
+      showToast(`📍 Folytatás a(z) ${targetPIdx + 1}. bekezdéstől (#${currentSentenceIdx + 1}. mondat)`);
+      logApp("RESUME_CLICKED", `Folytatás gomb aktiválva: #${targetPIdx + 1} bekezdés (#${currentSentenceIdx + 1} mondat)`);
     }
 
     // ==========================================
