@@ -118,6 +118,59 @@
       padding: 2px 4px;
       box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.5);
     }
+
+    /* Intelligens dinamikus mondat- és bekezdésszintű kiemelés */
+    .tts-sentence {
+      cursor: pointer;
+      border-radius: 4px;
+      padding: 1px 2px;
+      transition: background-color 0.2s ease, box-shadow 0.2s ease, color 0.2s ease;
+    }
+    .tts-sentence:hover {
+      opacity: 0.85;
+    }
+
+    body.theme-dark .tts-para-active {
+      border-left: 3px solid rgba(129, 140, 248, 0.7);
+      padding-left: 0.6rem;
+      transition: all 0.2s ease;
+    }
+    body.theme-dark .tts-sentence-active {
+      background-color: rgba(99, 102, 241, 0.35);
+      color: #ffffff !important;
+      font-weight: 500;
+      box-shadow: 0 0 0 2px rgba(129, 140, 248, 0.5);
+      border-radius: 5px;
+      padding: 2px 4px;
+    }
+
+    body.theme-sepia .tts-para-active {
+      border-left: 3px solid rgba(217, 119, 6, 0.75);
+      padding-left: 0.6rem;
+      transition: all 0.2s ease;
+    }
+    body.theme-sepia .tts-sentence-active {
+      background-color: rgba(217, 119, 6, 0.25);
+      color: #1a1209 !important;
+      font-weight: 600;
+      box-shadow: 0 0 0 2px rgba(180, 83, 9, 0.4);
+      border-radius: 5px;
+      padding: 2px 4px;
+    }
+
+    body.theme-light .tts-para-active {
+      border-left: 3px solid rgba(79, 70, 229, 0.85);
+      padding-left: 0.6rem;
+      transition: all 0.2s ease;
+    }
+    body.theme-light .tts-sentence-active {
+      background-color: rgba(99, 102, 241, 0.18);
+      color: #0f172a !important;
+      font-weight: 600;
+      box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.4);
+      border-radius: 5px;
+      padding: 2px 4px;
+    }
     .highlight-yellow { background-color: rgba(253, 224, 71, 0.4); }
     .highlight-green { background-color: rgba(74, 222, 128, 0.4); }
     .highlight-blue { background-color: rgba(96, 165, 250, 0.4); }
@@ -2633,15 +2686,15 @@
 
       book.paragraphs.forEach((p, pIdx) => {
         const rawSentences = splitParagraphIntoSentences(p);
-        rawSentences.forEach(s => {
+        rawSentences.forEach((s, sIdx) => {
           const trimmed = s.trim();
           if (trimmed.length > 0) {
             if (trimmed.length <= 500) {
-              ttsSentences.push({ text: trimmed, pIdx });
+              ttsSentences.push({ text: trimmed, pIdx, sIdx });
             } else {
               const subChunks = splitLongTextIntoChunks(trimmed, 500);
               subChunks.forEach(chunk => {
-                ttsSentences.push({ text: chunk, pIdx });
+                ttsSentences.push({ text: chunk, pIdx, sIdx });
               });
             }
           }
@@ -3290,24 +3343,96 @@
       }, 40);
     }
 
+    let activeSpannedPIdx = null;
+
     function highlightTTSSentence(item, autoScroll = true) {
-      removeActiveHighlights();
-      if (!item) return;
-      const pElem = document.getElementById(`para-${item.pIdx}`);
-      if (pElem) {
-        pElem.classList.add('tts-active');
-        if (autoScroll) {
-          isProgrammaticScroll = true;
-          pElem.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          setTimeout(() => {
-            isProgrammaticScroll = false;
-          }, 700);
+      if (!item) {
+        removeActiveHighlights();
+        return;
+      }
+
+      const pIdx = item.pIdx;
+      const sIdx = item.sIdx !== undefined ? item.sIdx : 0;
+      const pElem = document.getElementById(`para-${pIdx}`);
+      if (!pElem) return;
+
+      // 1. Ha másik bekezdésre léptünk át, visszaállítjuk az előző aktív bekezdés tiszta szövegét
+      if (activeSpannedPIdx !== null && activeSpannedPIdx !== pIdx) {
+        const prevPElem = document.getElementById(`para-${activeSpannedPIdx}`);
+        if (prevPElem && book.paragraphs[activeSpannedPIdx]) {
+          prevPElem.innerText = book.paragraphs[activeSpannedPIdx];
+          prevPElem.classList.remove('tts-para-active');
         }
+        activeSpannedPIdx = null;
+      }
+
+      // 2. Ha az aktuális bekezdés még nincs mondatokra bontva a DOM-ban, bontsuk szét span-ekre
+      if (activeSpannedPIdx !== pIdx) {
+        const sentences = splitParagraphIntoSentences(book.paragraphs[pIdx]);
+        pElem.innerHTML = '';
+        sentences.forEach((sText, idx) => {
+          const span = document.createElement('span');
+          span.id = `para-${pIdx}-sent-${idx}`;
+          span.className = 'tts-sentence';
+          span.innerText = sText + ' ';
+          span.onclick = (ev) => {
+            ev.stopPropagation();
+            jumpToSentenceInParagraph(pIdx, idx);
+          };
+          pElem.appendChild(span);
+        });
+        pElem.classList.add('tts-para-active');
+        activeSpannedPIdx = pIdx;
+      }
+
+      // 3. Töröljük a korábbi mondat-kiemelést ezen a bekezdésen belül
+      pElem.querySelectorAll('.tts-sentence-active').forEach(el => el.classList.remove('tts-sentence-active'));
+
+      // 4. Emeljük ki az aktuálisan elhangzó mondatot finom háttérrel
+      const currentSpan = document.getElementById(`para-${pIdx}-sent-${sIdx}`);
+      if (currentSpan) {
+        currentSpan.classList.add('tts-sentence-active');
+      }
+
+      // 5. Finom és precíz fókusz-görgetés az elhangzó mondathoz
+      if (autoScroll) {
+        isProgrammaticScroll = true;
+        (currentSpan || pElem).scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setTimeout(() => {
+          isProgrammaticScroll = false;
+        }, 700);
       }
     }
 
     function removeActiveHighlights() {
-      document.querySelectorAll('.tts-active').forEach(el => el.classList.remove('tts-active'));
+      if (activeSpannedPIdx !== null) {
+        const prevPElem = document.getElementById(`para-${activeSpannedPIdx}`);
+        if (prevPElem && book.paragraphs[activeSpannedPIdx]) {
+          prevPElem.innerText = book.paragraphs[activeSpannedPIdx];
+          prevPElem.classList.remove('tts-para-active');
+        }
+        activeSpannedPIdx = null;
+      }
+      document.querySelectorAll('.tts-active, .tts-para-active').forEach(el => {
+        el.classList.remove('tts-active', 'tts-para-active');
+      });
+      document.querySelectorAll('.tts-sentence-active').forEach(el => {
+        el.classList.remove('tts-sentence-active');
+      });
+    }
+
+    function jumpToSentenceInParagraph(pIdx, sIdx) {
+      if (!ttsSentences || ttsSentences.length === 0) return;
+      const targetIdx = ttsSentences.findIndex(s => s.pIdx === pIdx && s.sIdx === sIdx);
+      if (targetIdx !== -1) {
+        currentSentenceIdx = targetIdx;
+        lastSeenPIdx = pIdx;
+        if (!isSpeaking) {
+          isSpeaking = true;
+          document.getElementById('btn-play-pause').innerText = '⏸';
+        }
+        speakSentence(true);
+      }
     }
 
     function toggleDrawer() {
