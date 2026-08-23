@@ -2428,12 +2428,25 @@
         hasStartedPlaying = true;
       };
 
+      player.onloadedmetadata = () => {
+        if (sessionToken !== currentTTSSessionToken) return;
+        const dur = player.duration;
+        if (dur > 0 && isFinite(dur)) {
+          clearTimeout(playbackSafetyTimeout);
+          const watchdogMs = Math.max(3000, ((dur / ttsRate) * 1000) + 1500);
+          playbackSafetyTimeout = setTimeout(() => {
+            logApp("TTS_SAFETY_TIMEOUT", "Watchdog automatikus léptetés...");
+            safeEnd();
+          }, watchdogMs);
+        }
+      };
+
       player.ontimeupdate = () => {
         if (sessionToken !== currentTTSSessionToken || hasEnded || !hasStartedPlaying) return;
         const dur = player.duration;
         const curr = player.currentTime;
-        // Csak akkor zárjuk le, ha a lejátszás már ténylegesen elindult és elérte a legvégét
-        if (dur > 0.5 && isFinite(dur) && curr > 0.2 && curr >= dur - 0.02) {
+        // iOS Safari & Desktop: megbízható lezárási küszöb
+        if (dur > 0.3 && isFinite(dur) && curr > 0.1 && (curr >= dur - 0.10 || player.ended)) {
           safeEnd();
         }
       };
@@ -2446,6 +2459,15 @@
           playNativeUtteranceWithVoice(textToSay, null, onEndedCallback, sessionToken, isMaleVoice ? 0.85 : 1.0);
         }
       };
+
+      // Kezdeti becsült biztonsági időkorlát (ha a metadata nem érkezne meg)
+      clearTimeout(playbackSafetyTimeout);
+      const estSec = Math.max(5, (textToSay.length / (10 * ttsRate)) + 5);
+      playbackSafetyTimeout = setTimeout(() => {
+        if (sessionToken !== currentTTSSessionToken || hasEnded) return;
+        logApp("TTS_SAFETY_FALLBACK", "Becsült időkorlát elérve, léptetés...");
+        safeEnd();
+      }, estSec * 1000);
 
       try {
         player.currentTime = 0;
@@ -2531,7 +2553,7 @@
 
       let hasEnded = false;
       const safeEnd = () => {
-        if (hasEnded) return;
+        if (hasEnded || sessionToken !== currentTTSSessionToken) return;
         hasEnded = true;
         clearTimeout(window.speechWatchdog);
         logApp("EDGE_NATIVE_DONE", `Beszédhang befejezve: ${voiceObj ? voiceObj.name : 'Magyar hang'}`);
@@ -2544,7 +2566,7 @@
         safeEnd();
       };
 
-      const estDuration = Math.max(3500, (textToSay.length / (8 * ttsRate)) * 1000 + 3500);
+      const estDuration = Math.max(3000, (textToSay.length / (10 * ttsRate)) * 1000 + 2000);
       window.speechWatchdog = setTimeout(() => {
         safeEnd();
       }, estDuration);
