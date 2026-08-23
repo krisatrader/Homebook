@@ -1384,9 +1384,13 @@
               try {
                 const doc = await section.load(epubBook.load.bind(epubBook));
                 if (!doc) continue;
-                const elems = Array.from(doc.querySelectorAll('p, h1, h2, h3, h4, div'))
-                  .map(el => el.innerText ? el.innerText.trim() : '')
-                  .filter(t => t.length > 10);
+                let pNodes = Array.from(doc.querySelectorAll('p, h1, h2, h3, h4, blockquote, li'));
+                if (pNodes.length === 0) {
+                  pNodes = Array.from(doc.querySelectorAll('div, section')).filter(el => !el.querySelector('div, section, p'));
+                }
+                const elems = pNodes
+                  .map(el => (el.innerText || el.textContent || '').trim())
+                  .filter(t => t.length > 0);
                 
                 if (elems.length > 0) {
                   const startP = loadedParagraphs.length;
@@ -1932,12 +1936,37 @@
       }
     }
 
+    function splitParagraphIntoSentences(p) {
+      if (!p || typeof p !== 'string') return [];
+      const text = p.trim();
+      if (!text) return [];
+
+      const MARKER = '___DOT___';
+      let protectedText = text.replace(/\b(dr|prof|pl|kb|stb|vö|ill|gr|báró|özv|ifj|id|fej)\./gi, (m, p1) => p1 + MARKER);
+      protectedText = protectedText.replace(/(\d+)\.(?=\s+[a-záéíóöőúüű])/gi, (m, p1) => p1 + MARKER);
+
+      const regex = /.+?(?:[.!?…]+["'\u201D\u201C\u00BB\)]*(?=\s+["'\u201E\u201C\u2014\u2013\u00AB(A-ZÁÉÍÓÖŐÚÜŰ0-9]|$)|$)/gu;
+      const sentences = [];
+      let match;
+      while ((match = regex.exec(protectedText)) !== null) {
+        if (match[0].length === 0) {
+          regex.lastIndex++;
+          continue;
+        }
+        let s = match[0].replaceAll(MARKER, '.').trim();
+        if (s.length > 0) {
+          sentences.push(s);
+        }
+      }
+      return sentences.length > 0 ? sentences : [text];
+    }
+
     function prepareTTSData() {
       ttsSentences = [];
       currentSentenceIdx = 0;
 
       book.paragraphs.forEach((p, pIdx) => {
-        const rawSentences = p.match(/[^.!?]+[.!?]+/g) || [p];
+        const rawSentences = splitParagraphIntoSentences(p);
         rawSentences.forEach(s => {
           const trimmed = s.trim();
           if (trimmed.length > 0) {
