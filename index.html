@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Homebook Pro v2.0">
+  <meta name="apple-mobile-web-app-title" content="Homebook Pro v3.0">
   <meta name="theme-color" content="#0f172a">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
@@ -14,7 +14,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="icon" type="image/svg+xml" href="icon.svg">
   <link rel="apple-touch-icon" href="icon.svg">
-  <title>Homebook Pro v2.0</title>
+  <title>Homebook Pro v3.0</title>
 
   <!-- JSZip, ePubJS és PDF.js a dokumentumok kibontásához -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -191,7 +191,7 @@
         📚 <span class="hidden xs:inline">Könyvtár</span>
       </button>
       <h1 class="font-bold text-xs sm:text-sm tracking-tight bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent truncate max-w-[130px] sm:max-w-xs" id="app-title">
-        Homebook Pro v2.0
+        Homebook Pro v3.0
       </h1>
     </div>
 
@@ -506,8 +506,51 @@
     <div class="bg-slate-800 border-t sm:border border-slate-700 w-full max-w-md rounded-t-3xl sm:rounded-2xl p-6 space-y-5 transform translate-y-full sm:translate-y-0 transition-transform duration-300 shadow-2xl max-h-[90vh] overflow-y-auto" id="settings-sheet">
       
       <div class="flex items-center justify-between border-b border-slate-700 pb-3">
-        <h2 class="text-sm font-bold text-white flex items-center gap-2">⚙️ Olvasó Beállítások</h2>
+        <div class="flex items-center gap-2">
+          <h2 class="text-sm font-bold text-white flex items-center gap-1.5">⚙️ Olvasó Beállítások</h2>
+          <span class="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full font-bold border border-indigo-500/30">v3.0 Offline</span>
+        </div>
         <button onclick="toggleSettingsModal()" class="w-7 h-7 rounded-full bg-slate-700 text-slate-400 flex items-center justify-center hover:text-white text-xs">✕</button>
+      </div>
+
+      <!-- 📥 Teljes Könyv Háttérbeli Offline Letöltő (v3.0) -->
+      <div class="p-4 bg-slate-900/90 border border-indigo-500/40 rounded-2xl space-y-3 shadow-lg shadow-indigo-950/40">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="text-lg shrink-0">📥</span>
+            <div class="min-w-0">
+              <span class="text-xs font-bold text-white uppercase tracking-wider block truncate">Offline Hangoskönyv Letöltő</span>
+              <span class="text-[10px] text-slate-400 block truncate">100% Offline neurális beszédhang</span>
+            </div>
+          </div>
+          <span id="offline-download-badge" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-slate-400 border border-slate-700 shrink-0">⚪ Nincs letöltve</span>
+        </div>
+
+        <!-- Élő Haladási Sáv és Számadatok -->
+        <div class="space-y-1.5">
+          <div class="flex justify-between items-center text-[11px]">
+            <span id="offline-download-status-txt" class="text-slate-300 font-medium truncate max-w-[210px]">Készen áll a letöltésre</span>
+            <span id="offline-download-pct-txt" class="font-mono font-bold text-indigo-400">0%</span>
+          </div>
+          <div class="w-full bg-slate-800 rounded-full h-2 overflow-hidden border border-slate-700/50">
+            <div id="offline-download-progressbar" class="bg-gradient-to-r from-indigo-500 to-purple-500 h-full transition-all duration-300" style="width: 0%"></div>
+          </div>
+          <div class="flex justify-between items-center text-[10px] text-slate-400 font-medium">
+            <span id="offline-download-count">0 / 0 mondat</span>
+            <span id="offline-download-size">~0 MB</span>
+          </div>
+        </div>
+
+        <!-- Vezérlő Gombok -->
+        <div class="grid grid-cols-2 gap-2 pt-1">
+          <button type="button" id="btn-offline-download-start" onclick="toggleOfflineBookDownload()" class="py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition active:scale-95 shadow-md shadow-indigo-600/30">
+            <span>📥</span> <span id="lbl-offline-download-btn">Letöltés Indítása</span>
+          </button>
+          <button type="button" onclick="clearOfflineBookAudioCache()" class="py-2 bg-slate-800 hover:bg-rose-900/30 text-slate-300 hover:text-rose-300 border border-slate-700 hover:border-rose-700/50 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 transition active:scale-95">
+            <span>🗑️</span> <span>Tárhely Törlése</span>
+          </button>
+        </div>
+        <p class="text-[10px] text-slate-400 leading-tight">💡 Wifin a háttérben lementi a teljes könyv hangját, így repülőn, metrón vagy külföldön is nulla adatforgalommal szól a felolvasás.</p>
       </div>
 
       <div class="space-y-1.5">
@@ -966,7 +1009,23 @@
       } catch(e) {}
     }
 
-    async function dbPruneAudioCache(maxEntries = 600) {
+    async function dbGetAllAudioCacheKeys() {
+      try {
+        const db = await openLocalDB();
+        if (!db.objectStoreNames.contains('audio_cache')) return new Set();
+        return new Promise((resolve) => {
+          const tx = db.transaction('audio_cache', 'readonly');
+          const store = tx.objectStore('audio_cache');
+          const req = store.getAllKeys();
+          req.onsuccess = () => resolve(new Set(req.result || []));
+          req.onerror = () => resolve(new Set());
+        });
+      } catch(e) {
+        return new Set();
+      }
+    }
+
+    async function dbPruneAudioCache(maxEntries = 30000) {
       try {
         const db = await openLocalDB();
         if (!db.objectStoreNames.contains('audio_cache')) return;
@@ -1124,7 +1183,7 @@
 
     window.addEventListener('DOMContentLoaded', async () => {
       if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('./sw.js?v=6').then((reg) => {
+        navigator.serviceWorker.register('./sw.js?v=7').then((reg) => {
           reg.update().catch(() => {});
           reg.onupdatefound = () => {
             const installingWorker = reg.installing;
@@ -1641,6 +1700,7 @@
         
         renderBook();
         scrollToParagraph(lastSeenPIdx, false, true);
+        checkCurrentBookOfflineStatus();
       }
     }
 
@@ -2949,6 +3009,208 @@
 
     const activeFetchPromises = new Map();
 
+    // ==========================================
+    // 📥 OFFLINE HANGOSKÖNYV LETÖLTŐ MOTOR (v3.0)
+    // ==========================================
+    let isOfflineDownloading = false;
+    let isOfflineDownloadPaused = false;
+
+    async function checkCurrentBookOfflineStatus() {
+      if (!ttsSentences || ttsSentences.length === 0) {
+        updateOfflineDownloadUI(0, 0, 0, false);
+        return;
+      }
+
+      const totalSentences = ttsSentences.length;
+      const cachedKeys = await dbGetAllAudioCacheKeys();
+      
+      let cachedCount = 0;
+      for (const item of ttsSentences) {
+        const key = getAudioCacheKey(item.text, selectedEdgeVoice);
+        if (cachedKeys.has(key)) {
+          cachedCount++;
+        }
+      }
+
+      const estMB = (cachedCount * 0.022).toFixed(1); // Átlag ~22KB/mondat MP3
+      updateOfflineDownloadUI(cachedCount, totalSentences, estMB, isOfflineDownloading);
+    }
+
+    function updateOfflineDownloadUI(cached, total, sizeMB, downloading) {
+      const badge = document.getElementById('offline-download-badge');
+      const statusTxt = document.getElementById('offline-download-status-txt');
+      const pctTxt = document.getElementById('offline-download-pct-txt');
+      const pbar = document.getElementById('offline-download-progressbar');
+      const countElem = document.getElementById('offline-download-count');
+      const sizeElem = document.getElementById('offline-download-size');
+      const btnLbl = document.getElementById('lbl-offline-download-btn');
+      const startBtn = document.getElementById('btn-offline-download-start');
+
+      if (!total || total === 0) {
+        if (badge) { badge.className = "px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-slate-400 border border-slate-700 shrink-0"; badge.innerText = "⚪ Nincs könyv"; }
+        if (statusTxt) statusTxt.innerText = "Nincs aktív könyv betöltve";
+        if (pctTxt) pctTxt.innerText = "0%";
+        if (pbar) pbar.style.width = "0%";
+        if (countElem) countElem.innerText = "0 / 0 mondat";
+        if (sizeElem) sizeElem.innerText = "~0 MB";
+        return;
+      }
+
+      const pct = Math.min(100, Math.round((cached / total) * 100));
+
+      if (pctTxt) pctTxt.innerText = `${pct}%`;
+      if (pbar) pbar.style.width = `${pct}%`;
+      if (countElem) countElem.innerText = `${cached} / ${total} mondat`;
+      if (sizeElem) sizeElem.innerText = `~${sizeMB} MB`;
+
+      if (downloading) {
+        if (badge) { badge.className = "px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 shrink-0 animate-pulse"; badge.innerText = `🟡 Letöltés (${pct}%)`; }
+        if (statusTxt) statusTxt.innerText = `Letöltés folyamatban: ${cached}/${total}...`;
+        if (btnLbl) btnLbl.innerText = "Szüneteltetés";
+        if (startBtn) startBtn.className = "py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition active:scale-95 shadow-md shadow-amber-600/30";
+      } else if (pct >= 100) {
+        if (badge) { badge.className = "px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shrink-0"; badge.innerText = "🟢 Letöltve (100%)"; }
+        if (statusTxt) statusTxt.innerText = "A teljes könyv 100%-ban offline elérhető!";
+        if (btnLbl) btnLbl.innerText = "Újraellenőrzés";
+        if (startBtn) startBtn.className = "py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition active:scale-95 shadow-md shadow-emerald-600/30";
+      } else if (cached > 0) {
+        if (badge) { badge.className = "px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30 shrink-0"; badge.innerText = `🔵 Részben kész (${pct}%)`; }
+        if (statusTxt) statusTxt.innerText = `Szüneteltetve: ${cached}/${total} mondat kész`;
+        if (btnLbl) btnLbl.innerText = "Letöltés Folytatása";
+        if (startBtn) startBtn.className = "py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition active:scale-95 shadow-md shadow-indigo-600/30";
+      } else {
+        if (badge) { badge.className = "px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-slate-400 border border-slate-700 shrink-0"; badge.innerText = "⚪ Nincs letöltve"; }
+        if (statusTxt) statusTxt.innerText = "Készen áll a háttérbeli letöltésre";
+        if (btnLbl) btnLbl.innerText = "Letöltés Indítása";
+        if (startBtn) startBtn.className = "py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition active:scale-95 shadow-md shadow-indigo-600/30";
+      }
+    }
+
+    async function toggleOfflineBookDownload() {
+      if (isOfflineDownloading) {
+        pauseOfflineBookDownload();
+      } else {
+        startOfflineBookDownload();
+      }
+    }
+
+    function pauseOfflineBookDownload() {
+      isOfflineDownloadPaused = true;
+      isOfflineDownloading = false;
+      logApp("OFFLINE_DL_PAUSE", "Offline letöltés szüneteltetve a felhasználó által");
+      checkCurrentBookOfflineStatus();
+      showToast("Offline letöltés szüneteltetve.");
+    }
+
+    async function startOfflineBookDownload() {
+      if (!ttsSentences || ttsSentences.length === 0) {
+        showToast("Nincs betöltött könyv a letöltéshez.");
+        return;
+      }
+      if (!navigator.onLine) {
+        showToast("Nincs internetkapcsolat a letöltés elindításához.");
+        return;
+      }
+
+      isOfflineDownloading = true;
+      isOfflineDownloadPaused = false;
+
+      logApp("OFFLINE_DL_START", `Offline könyvletöltés elindítva: ${book.title}`, { voice: selectedEdgeVoice, total: ttsSentences.length });
+      showToast("📥 Teljes könyv letöltése elindult a háttérben...");
+
+      // Prioritásos mondatlista felépítése: aktuális mondattól előre a könyv végéig, majd elejétől vissza
+      const total = ttsSentences.length;
+      const startIdx = Math.max(0, Math.min(total - 1, currentSentenceIdx));
+      
+      const prioritizedIndices = [];
+      for (let i = startIdx; i < total; i++) prioritizedIndices.push(i);
+      for (let i = 0; i < startIdx; i++) prioritizedIndices.push(i);
+
+      const cachedKeys = await dbGetAllAudioCacheKeys();
+      let downloadedCount = 0;
+      for (const item of ttsSentences) {
+        if (cachedKeys.has(getAudioCacheKey(item.text, selectedEdgeVoice))) {
+          downloadedCount++;
+        }
+      }
+
+      updateOfflineDownloadUI(downloadedCount, total, (downloadedCount * 0.022).toFixed(1), true);
+
+      // Párhuzamos kötegelt letöltő ciklus (2 szálon 45ms pihenőkkel a Microsoft rate limit védelemért)
+      const CONCURRENCY = 2;
+      let currentIndexInQueue = 0;
+
+      const worker = async () => {
+        while (currentIndexInQueue < prioritizedIndices.length && isOfflineDownloading && !isOfflineDownloadPaused) {
+          const idx = prioritizedIndices[currentIndexInQueue++];
+          const item = ttsSentences[idx];
+          if (!item) continue;
+
+          const key = getAudioCacheKey(item.text, selectedEdgeVoice);
+          if (cachedKeys.has(key)) {
+            continue;
+          }
+
+          try {
+            const blob = await getOrFetchAudioBlob(item.text, selectedEdgeVoice);
+            if (blob) {
+              cachedKeys.add(key);
+              downloadedCount++;
+            }
+          } catch(err) {
+            logApp("OFFLINE_DL_ITEM_ERR", `Mondat letöltési hiba (#${idx})`, err);
+          }
+
+          if (downloadedCount % 4 === 0 || currentIndexInQueue >= prioritizedIndices.length) {
+            updateOfflineDownloadUI(downloadedCount, total, (downloadedCount * 0.022).toFixed(1), isOfflineDownloading);
+          }
+
+          await new Promise(r => setTimeout(r, 45));
+        }
+      };
+
+      const workers = [];
+      for (let w = 0; w < CONCURRENCY; w++) {
+        workers.push(worker());
+      }
+
+      await Promise.all(workers);
+
+      if (isOfflineDownloading && !isOfflineDownloadPaused) {
+        isOfflineDownloading = false;
+        logApp("OFFLINE_DL_COMPLETE", `Teljes könyv offline letöltése sikeres: ${book.title}`, { downloaded: downloadedCount, total });
+        checkCurrentBookOfflineStatus();
+        showToast("🎉 A teljes könyv sikeresen lementve offline használatra!");
+      }
+    }
+
+    async function clearOfflineBookAudioCache() {
+      if (!ttsSentences || ttsSentences.length === 0) {
+        showToast("Nincs aktív könyv.");
+        return;
+      }
+      
+      const count = ttsSentences.length;
+      for (const item of ttsSentences) {
+        const key = getAudioCacheKey(item.text, selectedEdgeVoice);
+        await dbDeleteAudioCache(key);
+      }
+
+      logApp("OFFLINE_CACHE_CLEARED", `Offline hangtárhely felszabadítva: ${book.title}`);
+      checkCurrentBookOfflineStatus();
+      showToast("Offline hanganyag törölve, tárhely felszabadítva!");
+    }
+
+    window.addEventListener('offline', () => {
+      if (isOfflineDownloading) {
+        pauseOfflineBookDownload();
+      }
+    });
+
+    window.addEventListener('online', () => {
+      checkCurrentBookOfflineStatus();
+    });
+
     async function getOrFetchAudioBlob(textToSay, voiceCode) {
       if (!textToSay || !voiceCode) return null;
       const cacheKey = getAudioCacheKey(textToSay, voiceCode);
@@ -3659,6 +3921,7 @@
       if (modal.classList.contains('opacity-0')) {
         modal.classList.remove('opacity-0', 'pointer-events-none');
         sheet.classList.remove('translate-y-full');
+        checkCurrentBookOfflineStatus();
         logApp("UI_MODAL", "Beállítások ablak megnyitva");
       } else {
         modal.classList.add('opacity-0', 'pointer-events-none');
