@@ -199,9 +199,6 @@
       <button onclick="toggleSearchModal()" class="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-slate-700/50 text-slate-300 hover:text-white flex items-center justify-center text-sm active:scale-95 transition" title="Keresés a könyvben">
         🔍
       </button>
-      <button onclick="toggleOfflineModal()" class="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-indigo-600/20 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-600/30 flex items-center justify-center text-sm active:scale-95 transition" title="Offline Hangoskönyv Letöltő (v3.0)">
-        📥
-      </button>
       <button id="btn-translate-all" onclick="translateCurrentContent()" class="hidden sm:flex px-2.5 py-1.5 rounded-xl bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 font-medium text-xs items-center gap-1 active:scale-95 transition" title="Teljes szöveg fordítása magyarra">
         <span>🇭🇺</span> <span>Fordítás</span>
       </button>
@@ -365,22 +362,18 @@
       </div>
 
       <!-- Gyorsműveletek sáv a menü alján -->
-      <div class="pt-3 border-t border-slate-700/80 grid grid-cols-4 gap-1 shrink-0 text-center">
-        <button onclick="toggleOfflineModal(); toggleDrawer();" class="p-2 bg-indigo-950/60 hover:bg-indigo-900/80 border border-indigo-500/30 rounded-xl text-indigo-300 hover:text-white flex flex-col items-center gap-1 transition" title="Offline Letöltés">
-          <span class="text-sm">📥</span>
-          <span class="text-[9px] font-bold">Letöltés</span>
-        </button>
+      <div class="pt-3 border-t border-slate-700/80 grid grid-cols-3 gap-1.5 shrink-0 text-center">
         <button onclick="addBookmark(); toggleDrawer();" class="p-2 bg-slate-900/60 hover:bg-slate-700 rounded-xl text-slate-300 hover:text-white flex flex-col items-center gap-1 transition" title="Könyvjelző">
           <span class="text-sm">🔖</span>
-          <span class="text-[9px] font-semibold">Könyvjelző</span>
+          <span class="text-[10px] font-semibold">Könyvjelző</span>
         </button>
         <button onclick="translateCurrentContent(); toggleDrawer();" class="p-2 bg-slate-900/60 hover:bg-slate-700 rounded-xl text-slate-300 hover:text-white flex flex-col items-center gap-1 transition" title="Fordítás">
           <span class="text-sm">🇭🇺</span>
-          <span class="text-[9px] font-semibold">Fordítás</span>
+          <span class="text-[10px] font-semibold">Fordítás</span>
         </button>
         <button onclick="toggleDiagnosticsModal(); toggleDrawer();" class="p-2 bg-slate-900/60 hover:bg-slate-700 rounded-xl text-slate-300 hover:text-white flex flex-col items-center gap-1 transition" title="Rendszernapló">
           <span class="text-sm">📋</span>
-          <span class="text-[9px] font-semibold">Logok</span>
+          <span class="text-[10px] font-semibold">Logok</span>
         </button>
       </div>
     </div>
@@ -437,12 +430,8 @@
       </div>
     </div>
 
-    <!-- GYORS GOMBOK (SEBESSÉG, IDŐZÍTŐ & OFFLINE) -->
+    <!-- GYORS GOMBOK (SEBESSÉG & IDŐZÍTŐ) -->
     <div class="flex items-center gap-1 sm:gap-1.5 shrink-0">
-      <button onclick="toggleOfflineModal()" id="btn-player-offline" class="px-2 py-1.5 rounded-xl bg-slate-700/80 hover:bg-slate-600 text-xs font-bold text-slate-300 active:scale-95 transition flex items-center gap-0.5" title="Offline Hangoskönyv Letöltő (v3.0)">
-        📥<span id="lbl-player-offline-status" class="hidden sm:inline ml-0.5 text-[10px]">Offline</span>
-      </button>
-
       <button onclick="toggleSleepTimerModal()" id="btn-sleep-timer" class="px-2 py-1.5 rounded-xl bg-slate-700/80 text-xs font-bold text-slate-300 hover:bg-slate-600 active:scale-95 transition flex items-center gap-0.5" title="Elalvási időzítő">
         🌙<span id="lbl-sleep-timer-btn" class="hidden sm:inline ml-0.5">Ki</span>
       </button>
@@ -572,49 +561,9 @@
       <div class="flex items-center justify-between border-b border-slate-700 pb-3">
         <div class="flex items-center gap-2">
           <h2 class="text-sm font-bold text-white flex items-center gap-1.5">⚙️ Olvasó Beállítások</h2>
-          <span class="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full font-bold border border-indigo-500/30">v3.0 Offline</span>
+          <span class="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full font-bold border border-indigo-500/30">v3.0</span>
         </div>
         <button onclick="toggleSettingsModal()" class="w-7 h-7 rounded-full bg-slate-700 text-slate-400 flex items-center justify-center hover:text-white text-xs">✕</button>
-      </div>
-
-      <!-- 📥 Teljes Könyv Háttérbeli Offline Letöltő (v3.0) -->
-      <div class="p-4 bg-slate-900/90 border border-indigo-500/40 rounded-2xl space-y-3 shadow-lg shadow-indigo-950/40">
-        <div class="flex items-center justify-between border-b border-slate-800 pb-2">
-          <div class="flex items-center gap-2 min-w-0">
-            <span class="text-lg shrink-0">📥</span>
-            <div class="min-w-0">
-              <span class="text-xs font-bold text-white uppercase tracking-wider block truncate">Offline Hangoskönyv Letöltő</span>
-              <span class="text-[10px] text-slate-400 block truncate">100% Offline neurális beszédhang</span>
-            </div>
-          </div>
-          <span id="offline-download-badge" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-slate-400 border border-slate-700 shrink-0">⚪ Nincs letöltve</span>
-        </div>
-
-        <!-- Élő Haladási Sáv és Számadatok -->
-        <div class="space-y-1.5">
-          <div class="flex justify-between items-center text-[11px]">
-            <span id="offline-download-status-txt" class="text-slate-300 font-medium truncate max-w-[210px]">Készen áll a letöltésre</span>
-            <span id="offline-download-pct-txt" class="font-mono font-bold text-indigo-400">0%</span>
-          </div>
-          <div class="w-full bg-slate-800 rounded-full h-2 overflow-hidden border border-slate-700/50">
-            <div id="offline-download-progressbar" class="bg-gradient-to-r from-indigo-500 to-purple-500 h-full transition-all duration-300" style="width: 0%"></div>
-          </div>
-          <div class="flex justify-between items-center text-[10px] text-slate-400 font-medium">
-            <span id="offline-download-count">0 / 0 mondat</span>
-            <span id="offline-download-size">~0 MB</span>
-          </div>
-        </div>
-
-        <!-- Vezérlő Gombok -->
-        <div class="grid grid-cols-2 gap-2 pt-1">
-          <button type="button" id="btn-offline-download-start" onclick="toggleOfflineBookDownload()" class="py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition active:scale-95 shadow-md shadow-indigo-600/30">
-            <span>📥</span> <span id="lbl-offline-download-btn">Letöltés Indítása</span>
-          </button>
-          <button type="button" onclick="clearOfflineBookAudioCache()" class="py-2 bg-slate-800 hover:bg-rose-900/30 text-slate-300 hover:text-rose-300 border border-slate-700 hover:border-rose-700/50 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 transition active:scale-95">
-            <span>🗑️</span> <span>Tárhely Törlése</span>
-          </button>
-        </div>
-        <p class="text-[10px] text-slate-400 leading-tight">💡 Wifin a háttérben lementi a teljes könyv hangját, így repülőn, metrón vagy külföldön is nulla adatforgalommal szól a felolvasás.</p>
       </div>
 
       <div class="space-y-1.5">
@@ -2379,8 +2328,11 @@
             </div>
           </div>
 
-          <div class="flex justify-end gap-2 pt-2 border-t border-slate-800">
+          <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
             <button onclick="loadBookFromLibrary('${b.id}'); toggleLibraryModal();" class="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold">Olvasás</button>
+            <button onclick="event.stopPropagation(); openOfflineForBook('${b.id}')" class="px-2.5 py-1 bg-indigo-950/70 hover:bg-indigo-900 text-indigo-300 hover:text-white border border-indigo-500/40 rounded-lg text-xs font-semibold flex items-center gap-1 transition active:scale-95" title="Offline letöltés">
+              <span>📥</span> <span>Offline</span>
+            </button>
             <button onclick="event.stopPropagation(); deleteBookFromLibrary('${b.id}', '${tab}')" class="px-2 py-1 text-rose-400 hover:bg-rose-500/20 rounded-lg text-xs" title="Könyv törlése">🗑️</button>
           </div>
         `;
@@ -3098,6 +3050,13 @@
 
       const estMB = (cachedCount * 0.022).toFixed(1); // Átlag ~22KB/mondat MP3
       updateOfflineDownloadUI(cachedCount, totalSentences, estMB, isOfflineDownloading);
+    }
+
+    function openOfflineForBook(bookId) {
+      if (currentBookId !== bookId) {
+        loadBookFromLibrary(bookId);
+      }
+      toggleOfflineModal();
     }
 
     function toggleOfflineModal() {
