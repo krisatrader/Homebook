@@ -408,36 +408,49 @@
     </div>
   </div>
 
-  <!-- LEJÁTSZÓ SÁV (MINIMALISTA, RESZPONZÍV IPHONE/MOBIL KIALAKÍTÁS) -->
-  <div class="fixed bottom-0 left-0 right-0 px-3 py-2.5 sm:p-3 pb-[calc(var(--sab)+0.6rem)] bg-slate-800/95 backdrop-blur-xl border-t border-slate-700/70 z-30 flex items-center justify-between gap-2.5 sm:gap-3 shadow-2xl">
+  <!-- LEJÁTSZÓ SÁV (KÉTSOROS IPHONE / MOBIL KIALAKÍTÁS) -->
+  <div class="fixed bottom-0 left-0 right-0 px-3 py-2.5 sm:px-4 sm:py-3 pb-[calc(var(--sab)+0.6rem)] bg-slate-800/95 backdrop-blur-xl border-t border-slate-700/70 z-30 flex flex-col gap-2 shadow-2xl">
     
-    <!-- LEJÁTSZÓ GOMBOK -->
-    <div class="flex items-center gap-1 sm:gap-1.5 shrink-0">
-      <button onclick="previousChapter()" class="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-slate-700/70 hover:bg-slate-600 text-slate-200 flex items-center justify-center text-[10px] sm:text-xs font-bold active:scale-95 transition" title="Előző fejezet">
-        ⏮
-      </button>
-      
-      <button id="btn-play-pause" onclick="toggleTTS()" class="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white flex items-center justify-center text-base sm:text-lg shrink-0 shadow-lg shadow-indigo-600/40 active:scale-90 transition" title="Felolvasás indítása/szüneteltetése">
-        ▶
-      </button>
+    <!-- 1. SOR: GOMBOK -->
+    <div class="flex items-center justify-between gap-1.5 w-full">
+      <div class="flex items-center gap-1.5 min-w-0">
+        <button onclick="previousChapter()" class="w-9 h-9 rounded-xl bg-slate-700/70 hover:bg-slate-600 text-slate-200 flex items-center justify-center text-xs font-bold active:scale-95 transition shrink-0" title="Előző fejezet">
+          ⏮
+        </button>
+        
+        <button id="btn-play-pause" onclick="toggleTTS()" class="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white flex items-center justify-center text-base sm:text-lg shrink-0 shadow-lg shadow-indigo-600/40 active:scale-90 transition font-bold" title="Felolvasás indítása/szüneteltetése">
+          ▶
+        </button>
 
-      <button id="btn-resume-last-position" onclick="resumeFromLastSavedPosition()" class="px-2.5 py-1.5 h-8 sm:h-9 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 hover:border-emerald-400 flex items-center justify-center gap-1 text-xs font-bold active:scale-95 transition shadow-sm" title="Ugrás az utolsó mentett/szinkronizált pozícióra és folytatás">
-        <span>📍</span> <span>Folytatás</span>
-      </button>
+        <button id="btn-resume-last-position" onclick="resumeFromLastSavedPosition()" class="px-2.5 sm:px-3 py-1.5 h-10 sm:h-11 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 hover:border-emerald-400 flex items-center justify-center gap-1 text-xs font-bold active:scale-95 transition shadow-sm shrink-0" title="Ugrás a legfrissebb mentett/szinkronizált pozícióra és folytatás">
+          <span>📍</span> <span>Folytatás</span>
+        </button>
 
-      <button onclick="nextChapter()" class="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-slate-700/70 hover:bg-slate-600 text-slate-200 flex items-center justify-center text-[10px] sm:text-xs font-bold active:scale-95 transition" title="Következő fejezet">
-        ⏭
-      </button>
+        <button onclick="nextChapter()" class="w-9 h-9 rounded-xl bg-slate-700/70 hover:bg-slate-600 text-slate-200 flex items-center justify-center text-xs font-bold active:scale-95 transition shrink-0" title="Következő fejezet">
+          ⏭
+        </button>
+      </div>
+
+      <!-- Gyorsgombok (Jobb oldal) -->
+      <div class="flex items-center gap-1.5 shrink-0">
+        <button onclick="toggleSleepTimerModal()" id="btn-sleep-timer" class="px-2 sm:px-2.5 py-1.5 h-9 sm:h-10 rounded-xl bg-slate-700/80 text-xs font-bold text-slate-300 hover:bg-slate-600 active:scale-95 transition flex items-center gap-0.5" title="Elalvási időzítő">
+          🌙<span id="lbl-sleep-timer-btn" class="ml-0.5 text-[11px]">Ki</span>
+        </button>
+
+        <button onclick="changeTTSSpeedShortcut()" id="btn-speed" class="px-2 sm:px-2.5 py-1.5 h-9 sm:h-10 rounded-xl bg-indigo-600/20 text-indigo-300 border border-indigo-500/30 text-xs font-bold hover:bg-indigo-600/30 active:scale-95 transition" title="Felolvasási sebesség">
+          1.0x
+        </button>
+      </div>
     </div>
 
-    <!-- FEJEZET & HALADÁS KÖZÉPEN -->
-    <div class="min-w-0 flex-1 space-y-1">
+    <!-- 2. SOR: FEJEZET INFÓK & HALADÁS -->
+    <div class="w-full space-y-1 bg-slate-900/50 px-3 py-1.5 rounded-xl border border-slate-700/40">
       <div class="flex items-center justify-between gap-1.5">
         <div id="bottom-chapter-title" class="text-xs font-bold text-slate-100 truncate flex items-center gap-1 min-w-0">
           <span class="text-indigo-400 text-xs shrink-0">📖</span>
-          <span id="bottom-chapter-name" class="truncate">Fejezet betöltése...</span>
+          <span id="bottom-chapter-name" class="truncate font-semibold">Fejezet betöltése...</span>
         </div>
-        <span id="bottom-chapter-percent" class="text-[11px] font-mono font-bold text-indigo-400 shrink-0">0%</span>
+        <span id="bottom-chapter-percent" class="text-xs font-mono font-bold text-indigo-400 shrink-0">0%</span>
       </div>
 
       <!-- Fejezet előrehaladási sáv -->
@@ -446,20 +459,9 @@
       </div>
 
       <div class="flex items-center justify-between text-[10px] text-slate-400 leading-none pt-0.5">
-        <span id="bottom-voice-name" class="text-indigo-300 font-medium truncate max-w-[120px] sm:max-w-none" title="Aktuális felolvasó hang">🎙️ MS Tamás</span>
+        <span id="bottom-voice-name" class="text-indigo-300 font-medium truncate" title="Aktuális felolvasó hang">🎙️ MS Tamás</span>
         <span id="bottom-chapter-time-left" class="text-indigo-300/90 font-medium shrink-0 ml-1">még ~0 perc</span>
       </div>
-    </div>
-
-    <!-- GYORS GOMBOK (SEBESSÉG & IDŐZÍTŐ) -->
-    <div class="flex items-center gap-1 sm:gap-1.5 shrink-0">
-      <button onclick="toggleSleepTimerModal()" id="btn-sleep-timer" class="px-2 py-1.5 rounded-xl bg-slate-700/80 text-xs font-bold text-slate-300 hover:bg-slate-600 active:scale-95 transition flex items-center gap-0.5" title="Elalvási időzítő">
-        🌙<span id="lbl-sleep-timer-btn" class="hidden sm:inline ml-0.5">Ki</span>
-      </button>
-
-      <button onclick="changeTTSSpeedShortcut()" id="btn-speed" class="px-2 py-1.5 rounded-xl bg-indigo-600/20 text-indigo-300 border border-indigo-500/30 text-xs font-bold hover:bg-indigo-600/30 active:scale-95 transition" title="Felolvasási sebesség">
-        1.0x
-      </button>
     </div>
   </div>
 
@@ -1255,7 +1257,7 @@
 
     window.addEventListener('DOMContentLoaded', async () => {
       if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('./sw.js?v=11').then((reg) => {
+        navigator.serviceWorker.register('./sw.js?v=12').then((reg) => {
           reg.update().catch(() => {});
           reg.onupdatefound = () => {
             const installingWorker = reg.installing;
@@ -1514,17 +1516,21 @@
       event.target.value = '';
     }
 
-    function saveReadingProgressToLocal() {
+    function saveReadingProgressToLocal(explicitTs) {
       if (!book || !book.id) return;
+
+      const now = explicitTs || Date.now();
+      book.lastUpdatedTimestamp = now;
+      book.lastSeenPIdx = lastSeenPIdx;
+      book.lastSeenSentenceIdx = currentSentenceIdx;
 
       clearTimeout(saveTimeout);
       saveTimeout = setTimeout(async () => {
-        book.lastSeenPIdx = lastSeenPIdx;
-        book.lastSeenSentenceIdx = currentSentenceIdx;
         const bIdx = myLibrary.findIndex(b => b.id === book.id);
         if (bIdx !== -1) {
           myLibrary[bIdx].lastSeenPIdx = lastSeenPIdx;
           myLibrary[bIdx].lastSeenSentenceIdx = currentSentenceIdx;
+          myLibrary[bIdx].lastUpdatedTimestamp = now;
           myLibrary[bIdx].status = book.status || 'folyamatban';
         }
         localStorage.setItem('ebook_active_book_id', book.id);
@@ -1533,7 +1539,7 @@
         if (book.title) {
           const totalP = (book.paragraphs && book.paragraphs.length) || 1;
           const pct = Math.round((lastSeenPIdx / totalP) * 100);
-          pushProgressToCloud(book.title, lastSeenPIdx, currentSentenceIdx, pct);
+          pushProgressToCloud(book.title, lastSeenPIdx, currentSentenceIdx, pct, now);
         }
       }, 200);
     }
@@ -3143,7 +3149,10 @@
       // Megőrizzük az aktuális mondat és bekezdés kiemelését szüneteltetéskor és más appba váltáskor
       ensureCurrentHighlightVisible();
       updateChapterProgressDisplay();
-      saveReadingProgressToLocal();
+      
+      const now = Date.now();
+      saveReadingProgressToLocal(now);
+
       if (wasSpeaking) {
         logApp("TTS_PAUSED", `Felolvasás szüneteltetve mondat #${currentSentenceIdx + 1}`);
       }
@@ -3260,11 +3269,14 @@
     }
 
     let lastPushedCloudTs = 0;
-    async function pushProgressToCloud(bookTitle, pIdx, sIdx, percent) {
+    async function pushProgressToCloud(bookTitle, pIdx, sIdx, percent, explicitTs) {
       if (!bookTitle || !navigator.onLine) return;
       const syncId = getOrCreateSyncId();
-      const now = Date.now();
-      lastPushedCloudTs = now;
+      const now = explicitTs || Date.now();
+      lastPushedCloudTs = Math.max(lastPushedCloudTs, now);
+      if (book) {
+        book.lastUpdatedTimestamp = now;
+      }
 
       try {
         const payload = {
@@ -3299,19 +3311,22 @@
         if (!remoteBook) return null;
 
         const remoteTs = remoteBook.timestamp || 0;
+        const localTs = (book && book.lastUpdatedTimestamp) ? book.lastUpdatedTimestamp : 0;
 
-        if (remoteTs > lastPushedCloudTs && remoteTs > lastPulledCloudTs) {
+        // Csak akkor fogadjuk el a felhőt, ha az időpontban ÚJABB mint a helyi állapot!
+        if (remoteTs > localTs && remoteTs > lastPushedCloudTs && remoteTs > lastPulledCloudTs) {
           lastPulledCloudTs = remoteTs;
           const targetPIdx = remoteBook.lastSeenPIdx || 0;
           const targetSIdx = remoteBook.lastSeenSentenceIdx || 0;
 
           if (autoApply && (targetPIdx !== lastSeenPIdx || targetSIdx !== currentSentenceIdx)) {
-            logApp("CLOUD_SYNC_APPLIED", `Pozíció átvéve másik eszközről: #${targetPIdx + 1} bekezdés (#${targetSIdx + 1} mondat)`, { syncId, bookTitle });
+            logApp("CLOUD_SYNC_APPLIED", `Pozíció átvéve másik eszközről (újabb időbélyeg): #${targetPIdx + 1} bekezdés (#${targetSIdx + 1} mondat)`, { syncId, bookTitle, remoteTs, localTs });
             
             lastSeenPIdx = targetPIdx;
             if (book) {
               book.lastSeenPIdx = targetPIdx;
               book.lastSeenSentenceIdx = targetSIdx;
+              book.lastUpdatedTimestamp = remoteTs;
             }
             currentSentenceIdx = targetSIdx;
 
@@ -3336,7 +3351,8 @@
         return;
       }
       showToast("🔄 Szinkronizálás a felhővel...");
-      await pushProgressToCloud(book.title, lastSeenPIdx, currentSentenceIdx, 0);
+      const now = Date.now();
+      await pushProgressToCloud(book.title, lastSeenPIdx, currentSentenceIdx, 0, now);
       const remote = await pullProgressFromCloud(book.title, true);
       if (remote) {
         showToast("✅ Pozíció szinkronizálva a másik eszközzel!");
@@ -3351,16 +3367,31 @@
         return;
       }
 
-      // 1. Felhőbeli legfrissebb pozíció ellenőrzése
+      // 1. Felhőbeli és helyi időpont összehasonlítása: MINDIG a legfrissebb időpont az alapja!
       let targetPIdx = book.lastSeenPIdx || 0;
       let targetSIdx = (book.lastSeenSentenceIdx !== undefined) ? book.lastSeenSentenceIdx : 0;
+      let localTs = (book && book.lastUpdatedTimestamp) ? book.lastUpdatedTimestamp : 0;
+      let usedSource = "helyi mentés";
 
       if (navigator.onLine && book.title) {
         try {
-          const remote = await pullProgressFromCloud(book.title, false);
-          if (remote && remote.lastSeenPIdx !== undefined) {
-            targetPIdx = remote.lastSeenPIdx;
-            targetSIdx = remote.lastSeenSentenceIdx || 0;
+          const syncId = getOrCreateSyncId();
+          const backendBase = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? '' : EDGE_BACKEND_URL;
+          const res = await fetch(`${backendBase}/api/sync/progress?syncId=${encodeURIComponent(syncId)}&title=${encodeURIComponent(book.title)}`);
+          if (res.ok) {
+            const data = await res.json();
+            const remote = data.book;
+            if (remote && remote.timestamp) {
+              const remoteTs = remote.timestamp;
+              // Ha a felhőbeli időpont ÚJABB mint a helyi mentés időpontja
+              if (remoteTs > localTs) {
+                targetPIdx = remote.lastSeenPIdx || 0;
+                targetSIdx = remote.lastSeenSentenceIdx || 0;
+                localTs = remoteTs;
+                book.lastUpdatedTimestamp = remoteTs;
+                usedSource = "másik eszköz (felhő)";
+              }
+            }
           }
         } catch(e) {}
       }
@@ -3391,6 +3422,7 @@
       lastSeenPIdx = targetPIdx;
       book.lastSeenPIdx = targetPIdx;
       book.lastSeenSentenceIdx = currentSentenceIdx;
+      book.lastUpdatedTimestamp = Math.max(localTs, Date.now());
 
       // 4. Görgetés a bekezdéshez és mondat kiemelése
       scrollToParagraph(targetPIdx, true, false);
@@ -3398,13 +3430,13 @@
         highlightTTSSentence(ttsSentences[currentSentenceIdx], true);
       }
 
-      // 5. Felolvasás indítása pontosan ettől a mondattól!
+      // 5. Felolvasás azonnali indítása pontosan ettől a mondattól!
       isSpeaking = true;
       document.getElementById('btn-play-pause').innerText = '⏸';
       speakSentence(true);
 
-      showToast(`📍 Folytatás a(z) ${targetPIdx + 1}. bekezdéstől (#${currentSentenceIdx + 1}. mondat)`);
-      logApp("RESUME_CLICKED", `Folytatás gomb aktiválva: #${targetPIdx + 1} bekezdés (#${currentSentenceIdx + 1} mondat)`);
+      showToast(`📍 Folytatás (${usedSource}): ${targetPIdx + 1}. bekezdés (#${currentSentenceIdx + 1}. mondat)`);
+      logApp("RESUME_CLICKED", `Folytatás gomb aktiválva (${usedSource}): #${targetPIdx + 1} bekezdés (#${currentSentenceIdx + 1} mondat)`);
     }
 
     // ==========================================

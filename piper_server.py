@@ -334,15 +334,19 @@ class HomebookServerHandler(BaseHTTPRequestHandler):
             with SYNC_LOCK:
                 if sync_id not in SYNC_DATA:
                     SYNC_DATA[sync_id] = {}
-                SYNC_DATA[sync_id][norm_title] = {
-                    "bookTitle": book_title,
-                    "lastSeenPIdx": last_p,
-                    "lastSeenSentenceIdx": last_s,
-                    "percent": pct,
-                    "timestamp": ts,
-                    "updatedAt": time.strftime("%Y-%m-%d %H:%M:%S")
-                }
-                save_sync_store()
+                
+                existing = SYNC_DATA[sync_id].get(norm_title)
+                # Mindig csak az időpontban frissebb rekordot fogadjuk el
+                if not existing or ts >= existing.get("timestamp", 0):
+                    SYNC_DATA[sync_id][norm_title] = {
+                        "bookTitle": book_title,
+                        "lastSeenPIdx": last_p,
+                        "lastSeenSentenceIdx": last_s,
+                        "percent": pct,
+                        "timestamp": ts,
+                        "updatedAt": time.strftime("%Y-%m-%d %H:%M:%S")
+                    }
+                    save_sync_store()
 
             self.send_response(200)
             self._send_cors_headers()
