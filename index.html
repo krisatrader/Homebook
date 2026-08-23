@@ -171,9 +171,21 @@
       border-radius: 5px;
       padding: 2px 4px;
     }
-    .highlight-yellow { background-color: rgba(253, 224, 71, 0.4); }
-    .highlight-green { background-color: rgba(74, 222, 128, 0.4); }
-    .highlight-blue { background-color: rgba(96, 165, 250, 0.4); }
+    .highlight-yellow, mark.highlight-yellow {
+      background-color: rgba(253, 224, 71, 0.45) !important;
+      border-radius: 4px;
+      padding: 1px 3px;
+    }
+    .highlight-green, mark.highlight-green {
+      background-color: rgba(74, 222, 128, 0.45) !important;
+      border-radius: 4px;
+      padding: 1px 3px;
+    }
+    .highlight-blue, mark.highlight-blue {
+      background-color: rgba(96, 165, 250, 0.45) !important;
+      border-radius: 4px;
+      padding: 1px 3px;
+    }
 
     ::-webkit-scrollbar { width: 5px; }
     ::-webkit-scrollbar-track { background: transparent; }
@@ -223,17 +235,22 @@
     <div class="max-w-2xl mx-auto space-y-5 pb-32" id="reader-content">
       <!-- Tartalom töltődik ide -->
     </div>
-
-    <!-- LEBEGŐ MENÜ SZÖVEGKIJELÖLÉSKOR -->
-    <div id="selection-popover" class="hidden absolute z-40 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl p-1.5 flex items-center gap-1 backdrop-blur-md">
-      <button onclick="applyHighlight('yellow')" class="px-2 py-1 rounded-lg hover:bg-slate-700 text-xs">🟨</button>
-      <button onclick="applyHighlight('green')" class="px-2 py-1 rounded-lg hover:bg-slate-700 text-xs">🟩</button>
-      <button onclick="applyHighlight('blue')" class="px-2 py-1 rounded-lg hover:bg-slate-700 text-xs">🟦</button>
-      <div class="w-px h-4 bg-slate-700 my-auto"></div>
-      <button onclick="translateSelectedText()" class="px-2.5 py-1 rounded-lg bg-emerald-600/30 text-emerald-300 hover:bg-emerald-600/50 text-xs font-semibold">🇭🇺 Fordít</button>
-      <button onclick="addNoteFromSelection()" class="px-2.5 py-1 rounded-lg bg-indigo-600/30 text-indigo-300 hover:bg-indigo-600/50 text-xs font-semibold">📝 Jegyzet</button>
-    </div>
   </main>
+
+  <!-- LEBEGŐ MENÜ SZÖVEGKIJELÖLÉSKOR (FIXED VIEWPORT-BASED) -->
+  <div id="selection-popover" class="hidden fixed z-50 bg-slate-800/95 border border-indigo-500/40 rounded-2xl shadow-2xl p-1.5 flex items-center gap-1 backdrop-blur-md text-white transition-opacity duration-150">
+    <button onpointerdown="event.preventDefault()" onclick="applyHighlight('yellow')" class="px-2 py-1.5 rounded-xl hover:bg-slate-700 active:scale-95 text-xs transition flex items-center" title="Sárga kiemelés">🟨</button>
+    <button onpointerdown="event.preventDefault()" onclick="applyHighlight('green')" class="px-2 py-1.5 rounded-xl hover:bg-slate-700 active:scale-95 text-xs transition flex items-center" title="Zöld kiemelés">🟩</button>
+    <button onpointerdown="event.preventDefault()" onclick="applyHighlight('blue')" class="px-2 py-1.5 rounded-xl hover:bg-slate-700 active:scale-95 text-xs transition flex items-center" title="Kék kiemelés">🟦</button>
+    <div class="w-px h-5 bg-slate-700 my-auto mx-0.5"></div>
+    <button onpointerdown="event.preventDefault()" onclick="addNoteFromSelection()" class="px-2.5 py-1.5 rounded-xl bg-indigo-600/30 text-indigo-300 hover:bg-indigo-600/50 hover:text-white text-xs font-semibold flex items-center gap-1 active:scale-95 transition">
+      <span>📝</span> <span>Jegyzet</span>
+    </button>
+    <button onpointerdown="event.preventDefault()" onclick="translateSelectedText()" class="px-2.5 py-1.5 rounded-xl bg-emerald-600/30 text-emerald-300 hover:bg-emerald-600/50 hover:text-white text-xs font-semibold flex items-center gap-1 active:scale-95 transition">
+      <span>🇭🇺</span> <span>Fordít</span>
+    </button>
+    <button onpointerdown="event.preventDefault()" onclick="copySelectedText()" class="px-2 py-1.5 rounded-xl hover:bg-slate-700 text-slate-300 hover:text-white text-xs active:scale-95 transition" title="Szöveg másolása">📋</button>
+  </div>
 
   <!-- TOAST ÉRTESÍTÉSEK -->
   <div id="toast-notification" class="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-indigo-600 text-white text-xs font-semibold px-4 py-2 rounded-xl shadow-xl opacity-0 pointer-events-none transition-all duration-300 border border-indigo-400/30">
@@ -1238,7 +1255,7 @@
 
     window.addEventListener('DOMContentLoaded', async () => {
       if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('./sw.js?v=10').then((reg) => {
+        navigator.serviceWorker.register('./sw.js?v=11').then((reg) => {
           reg.update().catch(() => {});
           reg.onupdatefound = () => {
             const installingWorker = reg.installing;
@@ -1861,15 +1878,17 @@
         }
         
         p.onclick = () => {
-          if (window.getSelection().toString().trim().length === 0) {
-            logApp("READER_PARA_CLICK", `Bekezdés kiválasztva: #para-${idx}`, { snippet: pText.substring(0, 35) });
+          if (window.getSelection().toString().trim().length > 0) return;
+          
+          logApp("READER_PARA_CLICK", `Bekezdés kiválasztva: #para-${idx}`, { snippet: pText.substring(0, 35) });
+          lastSeenPIdx = idx;
+          if (book) book.lastSeenPIdx = idx;
+          saveReadingProgressToLocal();
+
+          // Csak akkor ugrunk felolvasással, ha már eleve felolvasásban voltunk!
+          // Ha szünetel a lejátszás, NEM indítunk automatikusan hangot!
+          if (isSpeaking) {
             scrollToParagraph(idx, true, true);
-            
-            // Bekezdésre kattintáskor azonnal induljon el a felolvasás
-            if (!isSpeaking) {
-              isSpeaking = true;
-              document.getElementById('btn-play-pause').innerText = '⏸';
-            }
             speakSentence(true);
           }
         };
@@ -2427,33 +2446,85 @@
       });
     }
 
+    let lastSelectedText = '';
+    let lastSelectedPIdx = null;
+    let lastSelectedRange = null;
+
     function setupSelectionListener() {
-      document.addEventListener('selectionchange', () => {
+      const popover = document.getElementById('selection-popover');
+      if (!popover) return;
+
+      const handleSelection = () => {
         const selection = window.getSelection();
-        const popover = document.getElementById('selection-popover');
-        if (!popover) return;
+        if (!selection || selection.rangeCount === 0) {
+          popover.classList.add('hidden');
+          return;
+        }
 
-        if (selection && selection.rangeCount > 0 && selection.toString().trim().length > 0) {
-          try {
-            const range = selection.getRangeAt(0);
-            const rect = range.getBoundingClientRect();
-            const container = document.getElementById('reader-container');
-            if (!container) return;
-            const containerRect = container.getBoundingClientRect();
+        const text = selection.toString().trim();
+        if (text.length === 0) {
+          popover.classList.add('hidden');
+          return;
+        }
 
-            const top = rect.top - containerRect.top + container.scrollTop - 48;
-            const left = Math.max(10, Math.min(container.clientWidth - 260, rect.left - containerRect.left + container.scrollLeft));
+        try {
+          const range = selection.getRangeAt(0);
+          lastSelectedRange = range.cloneRange();
+          lastSelectedText = text;
 
-            popover.style.top = `${Math.max(10, top)}px`;
-            popover.style.left = `${left}px`;
-            popover.classList.remove('hidden');
-          } catch(e) {
-            popover.classList.add('hidden');
+          let pNode = range.commonAncestorContainer;
+          if (pNode.nodeType === Node.TEXT_NODE) {
+            pNode = pNode.parentElement;
           }
-        } else {
+          const pElem = pNode?.closest('p');
+          if (pElem && pElem.id && pElem.id.startsWith('para-')) {
+            lastSelectedPIdx = parseInt(pElem.id.replace('para-', ''));
+          } else {
+            lastSelectedPIdx = lastSeenPIdx;
+          }
+
+          const rect = range.getBoundingClientRect();
+          if (rect.width === 0 && rect.height === 0) {
+            popover.classList.add('hidden');
+            return;
+          }
+
+          const popoverWidth = 280;
+          const popoverHeight = 44;
+          let top = rect.top - popoverHeight - 10;
+          if (top < 60) {
+            top = rect.bottom + 10;
+          }
+          let left = rect.left + (rect.width / 2) - (popoverWidth / 2);
+          left = Math.max(12, Math.min(window.innerWidth - popoverWidth - 12, left));
+
+          popover.style.top = `${Math.round(top)}px`;
+          popover.style.left = `${Math.round(left)}px`;
+          popover.classList.remove('hidden');
+        } catch(e) {
           popover.classList.add('hidden');
         }
+      };
+
+      document.addEventListener('selectionchange', handleSelection);
+      document.addEventListener('mouseup', handleSelection);
+      document.addEventListener('touchend', () => {
+        setTimeout(handleSelection, 120);
       });
+    }
+
+    function copySelectedText() {
+      const text = lastSelectedText || window.getSelection().toString().trim();
+      if (text) {
+        navigator.clipboard.writeText(text).then(() => {
+          showToast("📋 Szöveg másolva a vágólapra!");
+        }).catch(() => {
+          showToast("Kijelölt szöveg másolva.");
+        });
+      }
+      const popover = document.getElementById('selection-popover');
+      if (popover) popover.classList.add('hidden');
+      window.getSelection()?.removeAllRanges();
     }
 
     function setupUserScrollPauseListener() {
@@ -2498,9 +2569,15 @@
     }
 
     async function translateSelectedText() {
-      const text = window.getSelection().toString().trim();
-      if (!text) return;
+      const text = lastSelectedText || window.getSelection().toString().trim();
+      if (!text) {
+        showToast("Nincs kijelölt szöveg.");
+        return;
+      }
       
+      const popover = document.getElementById('selection-popover');
+      if (popover) popover.classList.add('hidden');
+
       showProgress("Azonnali Fordítás", "Szakasz fordítása...", 50);
       try {
         const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=autodetect|hu`);
@@ -2524,38 +2601,73 @@
     }
 
     function applyHighlight(color) {
-      const selection = window.getSelection();
-      if (!selection || !selection.anchorNode) return;
+      const textToHighlight = lastSelectedText || window.getSelection().toString().trim();
+      const pIdx = (lastSelectedPIdx !== null && lastSelectedPIdx !== undefined) ? lastSelectedPIdx : lastSeenPIdx;
 
-      const pElem = selection.anchorNode.parentElement?.closest('p');
-      if (pElem) {
-        const pIdx = parseInt(pElem.id.replace('para-', ''));
-        highlights = highlights.filter(h => h.pIdx !== pIdx);
-        highlights.push({ pIdx, color });
-        saveMetadataToLocal();
-        renderBook();
-        showToast("Kiemelés elmentve.");
+      if (!textToHighlight || pIdx === null) {
+        showToast("Jelölj ki szöveget a kiemeléshez!");
+        return;
       }
+
+      const newHl = {
+        id: Date.now(),
+        pIdx: pIdx,
+        text: textToHighlight,
+        color: color,
+        date: new Date().toISOString()
+      };
+      highlights.push(newHl);
+      saveMetadataToLocal();
+
+      const pElem = document.getElementById(`para-${pIdx}`);
+      if (pElem) {
+        pElem.classList.add(`highlight-${color}`);
+      }
+
+      const popover = document.getElementById('selection-popover');
+      if (popover) popover.classList.add('hidden');
+      window.getSelection()?.removeAllRanges();
+
+      logApp("HIGHLIGHT_ADDED", `Kiemelés (${color}) hozzáadva a(z) ${pIdx + 1}. bekezdéshez`, {
+        snippet: textToHighlight.substring(0, 35)
+      });
+      showToast("🖍️ Kiemelés sikeresen elmentve!");
+    }
+
+    function deleteHighlight(hlId) {
+      const target = highlights.find(h => h.id === hlId);
+      highlights = highlights.filter(h => h.id !== hlId);
+      saveMetadataToLocal();
+      if (target) {
+        const otherInPara = highlights.some(h => h.pIdx === target.pIdx);
+        if (!otherInPara) {
+          const pElem = document.getElementById(`para-${target.pIdx}`);
+          if (pElem) {
+            pElem.classList.remove('highlight-yellow', 'highlight-green', 'highlight-blue');
+          }
+        }
+      }
+      renderDrawerContent('marks');
+      showToast("Kiemelés törölve.");
     }
 
     function addNoteFromSelection() {
-      const selection = window.getSelection();
-      const text = selection ? selection.toString().trim() : '';
-      if (!text) return;
-
-      let targetPIdx = lastSeenPIdx;
-      if (selection && selection.anchorNode) {
-        const pElem = selection.anchorNode.parentElement?.closest('p');
-        if (pElem && pElem.id && pElem.id.startsWith('para-')) {
-          targetPIdx = parseInt(pElem.id.replace('para-', ''));
-        }
+      const text = lastSelectedText || window.getSelection().toString().trim();
+      if (!text) {
+        showToast("Jelölj ki szöveget jegyzet készítéséhez!");
+        return;
       }
-      
+
+      const targetPIdx = (lastSelectedPIdx !== null && lastSelectedPIdx !== undefined) ? lastSelectedPIdx : lastSeenPIdx;
       pendingNotePIdx = targetPIdx;
       pendingNoteQuote = text;
-      
+
       document.getElementById('note-quote-preview').innerText = `"${text}" (📍 ${targetPIdx + 1}. bekezdés)`;
       document.getElementById('note-text-input').value = '';
+
+      const popover = document.getElementById('selection-popover');
+      if (popover) popover.classList.add('hidden');
+
       const modal = document.getElementById('note-modal');
       if (modal) modal.classList.remove('opacity-0', 'pointer-events-none');
     }
@@ -2579,11 +2691,12 @@
             text: noteText,
             quote: pendingNoteQuote.substring(0, 30)
           });
-          showToast(`Jegyzet elmentve a(z) ${finalPIdx + 1}. bekezdéshez!`);
+          showToast(`📝 Jegyzet elmentve a(z) ${finalPIdx + 1}. bekezdéshez!`);
         }
       }
       pendingNoteQuote = "";
       pendingNotePIdx = null;
+      window.getSelection()?.removeAllRanges();
     }
 
     function deleteNote(idx) {
@@ -4091,15 +4204,22 @@
 
     function jumpToSentenceInParagraph(pIdx, sIdx) {
       if (!ttsSentences || ttsSentences.length === 0) return;
+      if (window.getSelection().toString().trim().length > 0) return;
       const targetIdx = ttsSentences.findIndex(s => s.pIdx === pIdx && s.sIdx === sIdx);
       if (targetIdx !== -1) {
         currentSentenceIdx = targetIdx;
         lastSeenPIdx = pIdx;
-        if (!isSpeaking) {
-          isSpeaking = true;
-          document.getElementById('btn-play-pause').innerText = '⏸';
+        if (book) {
+          book.lastSeenPIdx = pIdx;
+          book.lastSeenSentenceIdx = currentSentenceIdx;
         }
-        speakSentence(true);
+        highlightTTSSentence(ttsSentences[currentSentenceIdx], false);
+        saveReadingProgressToLocal();
+
+        // Csak akkor beszél automatikusan, ha már eleve aktív felolvasás fut!
+        if (isSpeaking) {
+          speakSentence(true);
+        }
       }
     }
 
@@ -4210,19 +4330,52 @@
         });
       } 
       else if (tab === 'marks') {
-        if (bookmarks.length === 0) {
-          content.innerHTML = '<p class="text-xs text-slate-400 text-center py-4">Még nincs könyvjelződ.</p>';
+        if ((!bookmarks || bookmarks.length === 0) && (!highlights || highlights.length === 0)) {
+          content.innerHTML = '<p class="text-xs text-slate-400 text-center py-4">Még nincs könyvjelződ vagy kiemelésed. Jelölj ki szöveget kiemeléshez!</p>';
           return;
         }
-        bookmarks.forEach((bm, idx) => {
-          const item = document.createElement('div');
-          item.className = "p-2.5 bg-slate-900/60 hover:bg-slate-700/60 rounded-xl cursor-pointer text-indigo-300 flex items-center justify-between border border-slate-700/50";
-          item.innerHTML = `
-            <span onclick="scrollToParagraph(${bm.pIdx}, true, true); toggleDrawer();" class="truncate flex-1 font-medium text-xs">${bm.title}</span>
-            <button onclick="deleteBookmark(${idx})" class="p-1 hover:bg-rose-500/20 text-rose-400 rounded-lg text-xs shrink-0">🗑️</button>
-          `;
-          content.appendChild(item);
-        });
+
+        if (bookmarks && bookmarks.length > 0) {
+          const bmHeader = document.createElement('div');
+          bmHeader.className = "text-[10px] font-bold text-indigo-300 uppercase tracking-wider pt-1 pb-1.5 flex items-center gap-1";
+          bmHeader.innerHTML = "<span>🔖</span> <span>Könyvjelzők</span>";
+          content.appendChild(bmHeader);
+
+          bookmarks.forEach((bm, idx) => {
+            const item = document.createElement('div');
+            item.className = "p-2.5 bg-slate-900/60 hover:bg-slate-700/60 rounded-xl cursor-pointer text-indigo-300 flex items-center justify-between border border-slate-700/50 mb-1.5 transition";
+            item.innerHTML = `
+              <span onclick="scrollToParagraph(${bm.pIdx}, true, true); toggleDrawer();" class="truncate flex-1 font-medium text-xs">🔖 ${bm.title}</span>
+              <button onclick="deleteBookmark(${idx})" class="p-1 hover:bg-rose-500/20 text-rose-400 rounded-lg text-xs shrink-0" title="Törlés">🗑️</button>
+            `;
+            content.appendChild(item);
+          });
+        }
+
+        if (highlights && highlights.length > 0) {
+          const hlHeader = document.createElement('div');
+          hlHeader.className = "text-[10px] font-bold text-amber-300 uppercase tracking-wider pt-3 pb-1.5 flex items-center gap-1";
+          hlHeader.innerHTML = "<span>🖍️</span> <span>Kiemelések</span>";
+          content.appendChild(hlHeader);
+
+          highlights.forEach((hl) => {
+            const item = document.createElement('div');
+            const colorIcon = hl.color === 'yellow' ? '🟨' : (hl.color === 'green' ? '🟩' : '🟦');
+            const pIdx = (hl.pIdx !== undefined && hl.pIdx !== null) ? hl.pIdx : 0;
+            item.className = "p-2.5 bg-slate-900/80 hover:bg-slate-700/60 rounded-xl cursor-pointer border border-slate-700/50 mb-1.5 space-y-1 transition";
+            item.innerHTML = `
+              <div class="flex items-center justify-between text-[10px] text-slate-400 border-b border-slate-800 pb-1">
+                <span class="flex items-center gap-1 font-semibold text-slate-300">
+                  <span>${colorIcon}</span>
+                  <span>${pIdx + 1}. bekezdés</span>
+                </span>
+                <button onclick="deleteHighlight(${hl.id})" class="p-0.5 hover:bg-rose-500/20 text-rose-400 rounded text-xs" title="Kiemelés törlése">🗑️</button>
+              </div>
+              <p onclick="scrollToParagraph(${pIdx}, true, true); toggleDrawer();" class="text-xs text-slate-200 italic line-clamp-2 pt-0.5 font-serif cursor-pointer hover:text-indigo-200">"${hl.text || ''}"</p>
+            `;
+            content.appendChild(item);
+          });
+        }
       }
       else if (tab === 'notes') {
         if (notes.length === 0) {
