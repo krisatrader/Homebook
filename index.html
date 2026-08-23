@@ -1316,6 +1316,53 @@
       modal.classList.add('opacity-0', 'pointer-events-none');
     }
 
+    function normalizeHungarianText(text) {
+      if (!text) return '';
+      let t = text;
+
+      // 1. Mojibake UTF-8 kettős kódolás javítása
+      t = t.replace(/Ã¡/g, 'á').replace(/Ã©/g, 'é').replace(/Ã­/g, 'í').replace(/Ã³/g, 'ó')
+           .replace(/Ã¶/g, 'ö').replace(/Å‘/g, 'ő').replace(/Ãº/g, 'ú').replace(/Ã¼/g, 'ü').replace(/Å±/g, 'ű')
+           .replace(/Ã\u0081/g, 'Á').replace(/Ã\u0089/g, 'É').replace(/Ã\u008D/g, 'Í').replace(/Ã\u0093/g, 'Ó')
+           .replace(/Ã\u0096/g, 'Ö').replace(/Å\u0090/g, 'Ő').replace(/Ã\u009A/g, 'Ú').replace(/Ã\u009C/g, 'Ü').replace(/Å\u0091/g, 'Ű');
+
+      // 2. Hibás hullámos / kalapos ékezetek (ISO-8859-1 -> Latin-2)
+      t = t.replace(/õ/g, 'ő').replace(/Õ/g, 'Ő').replace(/û/g, 'ű').replace(/Û/g, 'Ű');
+
+      // 3. Nem szabványos TTF betűkészlet Q/q ékezet-helyettesítés szavanként
+      t = t.replace(/[a-zA-ZáéíóöőúüűÁÉÍÓÖŐÚÜŰ]+/g, (word) => {
+        const lower = word.toLowerCase();
+        if (lower.startsWith('qu') || lower === 'sql' || lower === 'faq' || lower === 'status quo' || lower === 'iraq' || lower === 'nasdaq') {
+          return word;
+        }
+        let res = '';
+        for (let i = 0; i < word.length; i++) {
+          const ch = word[i];
+          if (ch === 'Q') {
+            if (i === 0 && word.length > 1 && word[1] === word[1].toLowerCase()) {
+              res += 'Ő';
+            } else if (i === 0 && word.length === 1) {
+              res += 'Ő';
+            } else if (word === word.toUpperCase()) {
+              res += 'Ő';
+            } else {
+              res += 'ő';
+            }
+          } else if (ch === 'q') {
+            res += 'ű';
+          } else {
+            res += ch;
+          }
+        }
+        return res;
+      });
+
+      // 4. Többszörös felesleges szóközök összevonása
+      t = t.replace(/[ \t]{2,}/g, ' ');
+
+      return t.trim();
+    }
+
     function detectAndBuildChaptersFromParagraphs(paragraphs) {
       if (!paragraphs || paragraphs.length === 0) return { chapters: [{ title: "Teljes Könyv", level: 1, startP: 0, endP: 0 }], paragraphTypes: [] };
 
@@ -1413,11 +1460,26 @@
     function ensureBookStructure(targetBook) {
       if (!targetBook || !targetBook.paragraphs || targetBook.paragraphs.length === 0) return;
 
+      let hasCorruptedText = false;
+      targetBook.paragraphs = targetBook.paragraphs.map(p => {
+        const norm = normalizeHungarianText(p);
+        if (norm !== p) hasCorruptedText = true;
+        return norm;
+      });
+
+      if (targetBook.title) {
+        const normTitle = normalizeHungarianText(targetBook.title);
+        if (normTitle !== targetBook.title) {
+          targetBook.title = normTitle;
+          hasCorruptedText = true;
+        }
+      }
+
       const isDummyPageChapters = !targetBook.chapters || targetBook.chapters.length === 0 ||
         (targetBook.chapters.length > 2 && targetBook.chapters.every(c => /^\d+\.\s*Oldal/i.test(c.title)));
 
-      if (isDummyPageChapters) {
-        logApp("BOOK_STRUCTURE_FIX", `Automatikus fejezetszerkezet újraelemzés: ${targetBook.title}`);
+      if (isDummyPageChapters || hasCorruptedText) {
+        logApp("BOOK_STRUCTURE_FIX", `Automatikus könyv- és fejezetszerkezet javítás: ${targetBook.title}`);
         const { chapters, paragraphTypes } = detectAndBuildChaptersFromParagraphs(targetBook.paragraphs);
         targetBook.chapters = chapters;
         if (!targetBook.paragraphTypes || targetBook.paragraphTypes.length === 0) {
@@ -1429,13 +1491,16 @@
 
     function reanalyzeCurrentBookStructure() {
       if (!book || !book.paragraphs || book.paragraphs.length === 0) return;
+      book.paragraphs = book.paragraphs.map(p => normalizeHungarianText(p));
+      book.title = normalizeHungarianText(book.title);
       const { chapters, paragraphTypes } = detectAndBuildChaptersFromParagraphs(book.paragraphs);
       book.chapters = chapters;
       book.paragraphTypes = paragraphTypes;
       dbSaveBook(book);
+      document.getElementById('app-title').innerText = book.title;
       renderBook();
       renderDrawerContent('toc');
-      showToast("Fejezetszerkezet sikeresen újraelemezve!");
+      showToast("Szöveg és fejezetszerkezet sikeresen javítva!");
     }
 
     function loadBookFromLibrary(bookId) {
@@ -1621,7 +1686,8 @@
 
                 for (const el of domNodes) {
                   const rawText = (el.innerText || el.textContent || '').trim();
-                  if (!rawText) continue;
+                  const cleanText = normalizeHungarianText(rawText);
+                  if (!cleanText) continue;
 
                   const pIdx = loadedParagraphs.length;
                   const tag = (el.tagName || 'p').toLowerCase();
@@ -1632,7 +1698,7 @@
                   else if (tag === 'blockquote') pType = 'blockquote';
                   else if (tag === 'li') pType = 'li';
 
-                  loadedParagraphs.push(rawText);
+                  loadedParagraphs.push(cleanText);
                   loadedParagraphTypes.push(pType);
 
                   // ID és Anchor leképezések rögzítése

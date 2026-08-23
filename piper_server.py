@@ -29,12 +29,57 @@ except ImportError:
 PORT = int(os.environ.get("PORT", 5000))
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
+def normalize_hungarian_encoding(text: str) -> str:
+    """Javítja a sérült vagy nem szabványos TTF betűkészletből (Q/q, õ/û, UTF-8 mojibake) származó karaktereket."""
+    if not text:
+        return ""
+    t = text
+
+    # 1. Mojibake UTF-8 kettős kódolás javítása
+    mojibake = {
+        'Ã¡': 'á', 'Ã©': 'é', 'Ã­': 'í', 'Ã³': 'ó', 'Ã¶': 'ö', 'Å‘': 'ő', 'Ãº': 'ú', 'Ã¼': 'ü', 'Å±': 'ű',
+        'Ã\x81': 'Á', 'Ã\x89': 'É', 'Ã\x8d': 'Í', 'Ã\x93': 'Ó', 'Ã\x96': 'Ö', 'Å\x90': 'Ő', 'Ã\x9a': 'Ú', 'Ã\x9c': 'Ü', 'Å\x91': 'Ű'
+    }
+    for k, v in mojibake.items():
+        t = t.replace(k, v)
+
+    # 2. Hibás hullámos / kalapos ékezetek (ISO-8859-1 -> Latin-2)
+    t = t.replace('õ', 'ő').replace('Õ', 'Ő').replace('û', 'ű').replace('Û', 'Ű')
+
+    # 3. Nem szabványos TTF betűkészlet Q/q ékezet-helyettesítés
+    def fix_word(match):
+        w = match.group(0)
+        low = w.lower()
+        if low.startswith('qu') or low in {'sql', 'faq', 'iraq', 'nasdaq', 'status quo'}:
+            return w
+        res = []
+        for i, ch in enumerate(w):
+            if ch == 'Q':
+                if i == 0 and len(w) > 1 and w[1].islower():
+                    res.append('Ő')
+                elif i == 0 and len(w) == 1:
+                    res.append('Ő')
+                elif w.isupper():
+                    res.append('Ő')
+                else:
+                    res.append('ő')
+            elif ch == 'q':
+                res.append('ű')
+            else:
+                res.append(ch)
+        return "".join(res)
+
+    t = re.sub(r'[a-zA-ZáéíóöőúüűÁÉÍÓÖŐÚÜŰ]+', fix_word, t)
+    return t
+
 def sanitize_text_for_tts(text: str) -> str:
     """Megtisztítja a szöveget az Edge TTS számára a természetes és zavartalan kiejtéshez."""
     if not text:
         return ""
+    # Magyar ékezet- és kódolás javítás
+    t = normalize_hungarian_encoding(text)
     # XML és SSML tiltott karakterek tisztítása
-    t = text.replace('&', ' és ').replace('<', ' ').replace('>', ' ')
+    t = t.replace('&', ' és ').replace('<', ' ').replace('>', ' ')
     # Felesleges markdown vagy formázási jelek eltávolítása
     t = re.sub(r'[*_~`#]', ' ', t)
     # Többszörös pontozások egyszerűsítése
