@@ -1508,10 +1508,10 @@
     function ensureBookStructure(targetBook) {
       if (!targetBook || !targetBook.paragraphs || targetBook.paragraphs.length === 0) return;
 
-      let hasCorruptedText = false;
+      let hasModifiedText = false;
       targetBook.paragraphs = targetBook.paragraphs.map(p => {
         const norm = normalizeHungarianText(p);
-        if (norm !== p) hasCorruptedText = true;
+        if (norm !== p) hasModifiedText = true;
         return norm;
       });
 
@@ -1519,36 +1519,59 @@
         const normTitle = normalizeHungarianText(targetBook.title);
         if (normTitle !== targetBook.title) {
           targetBook.title = normTitle;
-          hasCorruptedText = true;
+          hasModifiedText = true;
         }
       }
 
+      // Meglévő fejezetek címeinek normalizálása (az eredeti szerkezet és határok 100%-os megőrzésével)
+      if (targetBook.chapters && targetBook.chapters.length > 0) {
+        targetBook.chapters.forEach(ch => {
+          if (ch.title) {
+            const normCh = normalizeHungarianText(ch.title);
+            if (normCh !== ch.title) {
+              ch.title = normCh;
+              hasModifiedText = true;
+            }
+          }
+        });
+      }
+
+      // KIZÁRÓLAG akkor generálunk fejezeteket a szövegből, ha NINCS fejezet vagy MINDEN fejezet dummy "1. Oldal", "2. Oldal"
       const isDummyPageChapters = !targetBook.chapters || targetBook.chapters.length === 0 ||
         (targetBook.chapters.length > 2 && targetBook.chapters.every(c => /^\d+\.\s*Oldal/i.test(c.title)));
 
-      if (isDummyPageChapters || hasCorruptedText) {
-        logApp("BOOK_STRUCTURE_FIX", `Automatikus könyv- és fejezetszerkezet javítás: ${targetBook.title}`);
+      if (isDummyPageChapters) {
+        logApp("BOOK_STRUCTURE_FIX", `Automatikus fejezetszerkezet generálás dummy oldalszámok helyett: ${targetBook.title}`);
         const { chapters, paragraphTypes } = detectAndBuildChaptersFromParagraphs(targetBook.paragraphs);
         targetBook.chapters = chapters;
         if (!targetBook.paragraphTypes || targetBook.paragraphTypes.length === 0) {
           targetBook.paragraphTypes = paragraphTypes;
         }
+        hasModifiedText = true;
+      }
+
+      if (hasModifiedText) {
         dbSaveBook(targetBook);
       }
     }
 
     function reanalyzeCurrentBookStructure() {
       if (!book || !book.paragraphs || book.paragraphs.length === 0) return;
+      // Csak szövegjavítás és tisztítás, az eredeti fejezetszerkezet megtartásával ha az létezik
       book.paragraphs = book.paragraphs.map(p => normalizeHungarianText(p));
       book.title = normalizeHungarianText(book.title);
-      const { chapters, paragraphTypes } = detectAndBuildChaptersFromParagraphs(book.paragraphs);
-      book.chapters = chapters;
-      book.paragraphTypes = paragraphTypes;
+      if (book.chapters && book.chapters.length > 0) {
+        book.chapters.forEach(ch => { if (ch.title) ch.title = normalizeHungarianText(ch.title); });
+      } else {
+        const { chapters, paragraphTypes } = detectAndBuildChaptersFromParagraphs(book.paragraphs);
+        book.chapters = chapters;
+        book.paragraphTypes = paragraphTypes;
+      }
       dbSaveBook(book);
       document.getElementById('app-title').innerText = book.title;
       renderBook();
       renderDrawerContent('toc');
-      showToast("Szöveg és fejezetszerkezet sikeresen javítva!");
+      showToast("Szöveg sikeresen javítva!");
     }
 
     function loadBookFromLibrary(bookId) {
@@ -3335,14 +3358,16 @@
           return;
         }
 
+        const l1Count = book.chapters.filter(c => (c.level || 1) === 1).length;
+        const subCount = book.chapters.filter(c => (c.level || 1) > 1).length;
+        let summaryText = `${book.chapters.length} fejezet`;
+        if (subCount > 0) {
+          summaryText = `${l1Count} főfejezet • ${subCount} alfejezet`;
+        }
+
         const topBar = document.createElement('div');
-        topBar.className = "flex items-center justify-between pb-1.5 border-b border-slate-700/40 text-[10px] text-slate-400";
-        topBar.innerHTML = `
-          <span>${book.chapters.length} fejezet/szakasz</span>
-          <button onclick="reanalyzeCurrentBookStructure()" class="text-indigo-400 hover:text-indigo-300 flex items-center gap-1 font-semibold" title="Szöveg átvizsgálása és fejezetek újragenerálása">
-            <span>🔄 Újraelemzés</span>
-          </button>
-        `;
+        topBar.className = "flex items-center justify-between pb-1.5 border-b border-slate-700/40 text-[10px] text-slate-400 font-medium";
+        topBar.innerHTML = `<span>📑 ${summaryText}</span>`;
         content.appendChild(topBar);
 
         book.chapters.forEach(ch => {
