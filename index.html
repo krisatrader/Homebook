@@ -53,16 +53,64 @@
   </script>
 
   <style>
-    :root {
+    :root, body.theme-dark {
       --sat: env(safe-area-inset-top, 0px);
       --sab: env(safe-area-inset-bottom, 0px);
+      --reader-bg: #0f172a;
+      --reader-text: #f1f5f9;
+      --reader-heading: #ffffff;
+      --reader-subheading: #a5b4fc;
+      --reader-section: #cbd5e1;
+      --reader-quote-bg: rgba(30, 41, 59, 0.6);
+      --reader-quote-border: #6366f1;
+      --reader-quote-text: #e2e8f0;
+      --reader-banner-bg: rgba(99, 102, 241, 0.15);
+      --reader-banner-border: rgba(99, 102, 241, 0.3);
+      --reader-banner-text: #818cf8;
+      --reader-divider: rgba(255, 255, 255, 0.1);
     }
+
+    body.theme-sepia {
+      --reader-bg: #f5edd6;
+      --reader-text: #2d2013;
+      --reader-heading: #1a1209;
+      --reader-subheading: #9a3412;
+      --reader-section: #43302b;
+      --reader-quote-bg: rgba(232, 222, 198, 0.7);
+      --reader-quote-border: #c2410c;
+      --reader-quote-text: #3d2b1f;
+      --reader-banner-bg: rgba(194, 65, 12, 0.12);
+      --reader-banner-border: rgba(194, 65, 12, 0.25);
+      --reader-banner-text: #9a3412;
+      --reader-divider: rgba(67, 52, 34, 0.15);
+    }
+
+    body.theme-light {
+      --reader-bg: #ffffff;
+      --reader-text: #0f172a;
+      --reader-heading: #020617;
+      --reader-subheading: #3730a3;
+      --reader-section: #1e293b;
+      --reader-quote-bg: #f8fafc;
+      --reader-quote-border: #4f46e5;
+      --reader-quote-text: #0f172a;
+      --reader-banner-bg: #eef2ff;
+      --reader-banner-border: #c7d2fe;
+      --reader-banner-text: #3730a3;
+      --reader-divider: rgba(0, 0, 0, 0.08);
+    }
+
     body {
       -webkit-tap-highlight-color: transparent;
       user-select: none;
     }
     .reader-selectable {
       user-select: text;
+    }
+    #reader-container {
+      background-color: var(--reader-bg);
+      color: var(--reader-text);
+      transition: background-color 0.25s ease, color 0.25s ease;
     }
     .tts-active {
       background-color: rgba(99, 102, 241, 0.35);
@@ -1536,18 +1584,21 @@
           const isL1 = (chapter.level || 1) === 1;
           
           if (isL1) {
-            chBanner.className = "pt-8 pb-3 mt-6 mb-3 border-b border-indigo-500/30 flex items-center justify-between";
+            chBanner.className = "pt-8 pb-3 mt-6 mb-3 border-b flex items-center justify-between";
+            chBanner.style.borderColor = "var(--reader-divider)";
             chBanner.innerHTML = `
               <div class="flex items-center gap-2">
-                <span class="text-xs uppercase font-bold tracking-widest text-indigo-400 bg-indigo-500/10 px-2.5 py-1 rounded-lg border border-indigo-500/20">
+                <span class="text-xs uppercase font-bold tracking-widest px-2.5 py-1 rounded-lg border" style="background-color: var(--reader-banner-bg); border-color: var(--reader-banner-border); color: var(--reader-banner-text);">
                   📖 Fejezet
                 </span>
-                <span class="text-xs font-semibold text-slate-400 truncate max-w-[200px] sm:max-w-md">${chapter.title}</span>
+                <span class="text-xs font-bold truncate max-w-[200px] sm:max-w-md" style="color: var(--reader-subheading);">${chapter.title}</span>
               </div>
             `;
           } else {
-            chBanner.className = "pt-4 pb-1 mt-4 mb-2 flex items-center gap-1.5 text-xs font-semibold text-indigo-300/80 border-b border-slate-700/40";
-            chBanner.innerHTML = `<span class="text-indigo-400">↳</span> <span>${chapter.title}</span>`;
+            chBanner.className = "pt-4 pb-1 mt-4 mb-2 flex items-center gap-1.5 text-xs font-semibold border-b";
+            chBanner.style.borderColor = "var(--reader-divider)";
+            chBanner.style.color = "var(--reader-subheading)";
+            chBanner.innerHTML = `<span>↳</span> <span>${chapter.title}</span>`;
           }
           fragment.appendChild(chBanner);
         }
@@ -1562,27 +1613,35 @@
         const fontClass = currentFontFamily === 'serif' ? 'font-serif' : 'font-sans';
 
         if (pType === 'h1' || (pType === 'p' && isHeadingPattern)) {
-          p.className = `pt-6 pb-2 font-black tracking-tight text-white transition-all duration-150 cursor-pointer hover:opacity-90 ${fontClass}`;
+          p.className = `pt-6 pb-2 font-black tracking-tight transition-all duration-150 cursor-pointer hover:opacity-90 ${fontClass}`;
+          p.style.color = "var(--reader-heading)";
           p.style.fontSize = `${Math.round(currentFontSize * 1.4)}px`;
           p.style.lineHeight = `1.3`;
         } else if (pType === 'h2') {
-          p.className = `pt-4 pb-1.5 font-bold tracking-tight text-indigo-200 transition-all duration-150 cursor-pointer hover:opacity-90 ${fontClass}`;
+          p.className = `pt-4 pb-1.5 font-bold tracking-tight transition-all duration-150 cursor-pointer hover:opacity-90 ${fontClass}`;
+          p.style.color = "var(--reader-subheading)";
           p.style.fontSize = `${Math.round(currentFontSize * 1.25)}px`;
           p.style.lineHeight = `1.35`;
         } else if (pType === 'h3') {
-          p.className = `pt-3 pb-1 font-semibold text-slate-200 transition-all duration-150 cursor-pointer hover:opacity-90 ${fontClass}`;
+          p.className = `pt-3 pb-1 font-bold tracking-tight transition-all duration-150 cursor-pointer hover:opacity-90 ${fontClass}`;
+          p.style.color = "var(--reader-section)";
           p.style.fontSize = `${Math.round(currentFontSize * 1.15)}px`;
           p.style.lineHeight = `1.4`;
         } else if (pType === 'blockquote') {
-          p.className = `italic text-slate-300 pl-4 py-2 my-2 border-l-4 border-indigo-500/80 bg-slate-800/40 rounded-r-xl transition-all duration-150 cursor-pointer hover:opacity-90 leading-relaxed ${fontClass}`;
+          p.className = `italic pl-4 py-2.5 my-3 border-l-4 rounded-r-xl transition-all duration-150 cursor-pointer hover:opacity-90 leading-relaxed ${fontClass}`;
+          p.style.backgroundColor = "var(--reader-quote-bg)";
+          p.style.borderColor = "var(--reader-quote-border)";
+          p.style.color = "var(--reader-quote-text)";
           p.style.fontSize = `${Math.round(currentFontSize * 0.95)}px`;
           p.style.lineHeight = `${currentLineHeight}`;
         } else if (pType === 'li') {
-          p.className = `pl-5 list-disc text-slate-200 transition-all duration-150 cursor-pointer hover:opacity-90 leading-relaxed ${fontClass}`;
+          p.className = `pl-5 list-disc transition-all duration-150 cursor-pointer hover:opacity-90 leading-relaxed ${fontClass}`;
+          p.style.color = "var(--reader-text)";
           p.style.fontSize = `${currentFontSize}px`;
           p.style.lineHeight = `${currentLineHeight}`;
         } else {
           p.className = `transition-all duration-150 leading-relaxed cursor-pointer hover:opacity-90 ${fontClass}`;
+          p.style.color = "var(--reader-text)";
           p.style.fontSize = `${currentFontSize}px`;
           p.style.lineHeight = `${currentLineHeight}`;
         }
@@ -3461,11 +3520,15 @@
     function setTheme(theme) {
       currentTheme = theme;
       const body = document.body;
-      body.classList.remove('bg-slate-900', 'text-slate-100', 'bg-sepia-bg', 'text-sepia-text', 'bg-white', 'text-slate-900');
+      body.classList.remove('theme-dark', 'theme-sepia', 'theme-light', 'dark', 'bg-slate-900', 'text-slate-100', 'bg-sepia-bg', 'text-sepia-text', 'bg-white', 'text-slate-900');
 
-      if (theme === 'dark') body.classList.add('bg-slate-900', 'text-slate-100');
-      else if (theme === 'sepia') body.classList.add('bg-sepia-bg', 'text-sepia-text');
-      else body.classList.add('bg-white', 'text-slate-900');
+      if (theme === 'dark') {
+        body.classList.add('theme-dark', 'dark', 'bg-slate-900', 'text-slate-100');
+      } else if (theme === 'sepia') {
+        body.classList.add('theme-sepia', 'bg-sepia-bg', 'text-sepia-text');
+      } else {
+        body.classList.add('theme-light', 'bg-white', 'text-slate-900');
+      }
 
       const themes = ['dark', 'sepia', 'light'];
       themes.forEach(t => {
