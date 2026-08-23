@@ -2289,51 +2289,92 @@
       });
     }
 
-    async function playAzureSpeechRestTTS(textToSay, voiceName, apiKey, region, onEndedCallback, sessionToken) {
+    const activeFetchPromises = new Map();
+
+    async function getOrFetchAudioBlob(textToSay, voiceCode) {
+      if (!textToSay || !voiceCode) return null;
+      const cacheKey = getAudioCacheKey(textToSay, voiceCode);
+
+      // 1. IndexedDB helyi gyorsítótár (0ms)
       try {
-        const rateDiff = Math.round((ttsRate - 1.0) * 100);
-        const rateStr = rateDiff >= 0 ? `+${rateDiff}%` : `${rateDiff}%`;
-        const ssml = `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='hu-HU'>` +
-          `<voice name='${voiceName}'>` +
-          `<prosody pitch='+0Hz' rate='${rateStr}' volume='+0%'>` +
-          `${escapeXml(textToSay)}` +
-          `</prosody></voice></speak>`;
+        const cached = await dbGetAudioCache(cacheKey);
+        if (cached && cached.size > 100) {
+          return cached;
+        }
+      } catch(e) {}
 
-        const endpoint = `https://${region}.tts.speech.microsoft.com/cognitiveservices/v1`;
-        const response = await fetch(endpoint, {
-          method: 'POST',
-          headers: {
-            'Ocp-Apim-Subscription-Key': apiKey,
-            'Content-Type': 'application/ssml+xml',
-            'X-Microsoft-OutputFormat': 'audio-24khz-48kbitrate-mono-mp3',
-            'User-Agent': 'HomebookPro'
-          },
-          body: ssml
-        });
+      // 2. Ha már folyamatban van egy letöltés pontosan erre a szövegre, várjuk meg ugyanazt a Promise-t (nincs duplikáció!)
+      if (activeFetchPromises.has(cacheKey)) {
+        return await activeFetchPromises.get(cacheKey);
+      }
 
-        if (!response.ok) {
-          logApp("AZURE_HTTP_ERR", `Azure Speech API HTTP hiba: ${response.status} ${response.statusText}`);
-          return false;
+      // 3. Egyetlen koordinált hálózati letöltés
+      const fetchPromise = (async () => {
+        const voiceName = voiceCode.replace('edge-', '');
+        
+        // Azure közvetlen kulcs ellenőrzése
+        const azureKey = localStorage.getItem('ebook_azure_key');
+        const azureRegion = localStorage.getItem('ebook_azure_region') || 'westeurope';
+        if (azureKey && azureKey.trim().length > 0) {
+          try {
+            const rateDiff = Math.round((ttsRate - 1.0) * 100);
+            const rateStr = rateDiff >= 0 ? `+${rateDiff}%` : `${rateDiff}%`;
+            const ssml = `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='hu-HU'>` +
+              `<voice name='${voiceName}'>` +
+              `<prosody pitch='+0Hz' rate='${rateStr}' volume='+0%'>` +
+              `${escapeXml(textToSay)}` +
+              `</prosody></voice></speak>`;
+
+            const endpoint = `https://${azureRegion.trim()}.tts.speech.microsoft.com/cognitiveservices/v1`;
+            const response = await fetch(endpoint, {
+              method: 'POST',
+              headers: {
+                'Ocp-Apim-Subscription-Key': azureKey.trim(),
+                'Content-Type': 'application/ssml+xml',
+                'X-Microsoft-OutputFormat': 'audio-24khz-48kbitrate-mono-mp3',
+                'User-Agent': 'HomebookPro'
+              },
+              body: ssml
+            });
+            if (response && response.ok) {
+              const blob = await response.blob();
+              if (blob && blob.size > 100) {
+                await dbPutAudioCache(cacheKey, blob, textToSay);
+                return blob;
+              }
+            }
+          } catch(err) {
+            logApp("AZURE_FETCH_ERR", "Azure letöltési hiba", err);
+          }
         }
 
-        const blob = await response.blob();
-        if (sessionToken !== currentTTSSessionToken || !isSpeaking) return true;
-
-        // Mentés a helyi 0ms-os gyorsítótárba
-        const cacheKey = getAudioCacheKey(textToSay, `edge-${voiceName}`);
-        dbPutAudioCache(cacheKey, blob, textToSay);
-
-        if (currentAudioBlobUrl) {
-          URL.revokeObjectURL(currentAudioBlobUrl);
+        // Edge-TTS Cloud Run szerver
+        const baseUrl = getEffectiveServerUrl();
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 10000);
+          const endpointUrl = `${baseUrl}/api/tts?text=${encodeURIComponent(textToSay)}&voice=${encodeURIComponent(voiceName)}&speed=${encodeURIComponent(ttsRate)}`;
+          const response = await fetch(endpointUrl, { signal: controller.signal });
+          clearTimeout(timeoutId);
+          if (response && response.ok) {
+            const blob = await response.blob();
+            if (blob && blob.size > 100) {
+              await dbPutAudioCache(cacheKey, blob, textToSay);
+              return blob;
+            }
+          }
+        } catch(err) {
+          logApp("EDGE_FETCH_ERR", `Edge-TTS szerver hiba (${baseUrl})`, err);
         }
-        currentAudioBlobUrl = URL.createObjectURL(blob);
-        activePlayer.src = currentAudioBlobUrl;
-        setupPlayerEventsAndPlay(activePlayer, onEndedCallback, sessionToken, voiceName, textToSay);
-        prepareStandbyAudio(currentSentenceIdx + 1, `edge-${voiceName}`);
-        return true;
-      } catch (err) {
-        logApp("AZURE_FETCH_EXCEPTION", "Azure REST hiba", err);
-        return false;
+        return null;
+      })();
+
+      activeFetchPromises.set(cacheKey, fetchPromise);
+      try {
+        const result = await fetchPromise;
+        return result;
+      } finally {
+        activeFetchPromises.delete(cacheKey);
       }
     }
 
@@ -2341,23 +2382,8 @@
       if (!sessionToken) sessionToken = currentTTSSessionToken;
       const voiceName = voiceCode.replace('edge-', '');
 
-      // Nyelvkód meghatározása a választott hangból
-      let langCode = 'hu';
-      if (voiceName.includes('en-US') || voiceName.includes('Jenny') || voiceName.includes('Guy')) langCode = 'en';
-      else if (voiceName.includes('de-DE') || voiceName.includes('Katja')) langCode = 'de';
-      else if (voiceName.includes('fr-FR')) langCode = 'fr';
-      else if (voiceName.includes('es-ES')) langCode = 'es';
-      else if (voiceName.includes('it-IT')) langCode = 'it';
-
-      // 0. Gyorsítótár ellenőrzése (0ms azonnali lejátszás)
-      logApp("EDGE_TTS_REQ", `Microsoft Neural TTS kérés #${sessionToken} (${voiceName}, nyelv: ${langCode})`, {
-        text: textToSay.substring(0, 40),
-        length: textToSay.length
-      });
-
-      // 2. A/B DUPLA LEJÁTSZÓS PING-PONG ÁTADÁS (0ms azonnali megszólalás)
+      // 1. A/B DUPLA LEJÁTSZÓS PING-PONG ÁTADÁS (0ms azonnali megszólalás)
       if (standbySentenceIdx === currentSentenceIdx && standbyBlobUrl) {
-        // Átváltjuk az aktív és a készenléti lejátszót
         const oldActive = activePlayer;
         activePlayer = standbyPlayer;
         standbyPlayer = oldActive;
@@ -2377,53 +2403,29 @@
         return;
       }
 
-      // 3. Gyorsítótár ellenőrzése (IndexedDB 0ms)
-      const cacheKey = getAudioCacheKey(textToSay, voiceCode);
-      const cachedBlob = await dbGetAudioCache(cacheKey);
+      // 2. Ha nincs standby-ban, koordinált letöltés / gyorsítótár lekérés
+      const statElem = document.getElementById('tts-status');
+      if (statElem && isSpeaking) {
+        const isTamas = voiceName.includes('Tamas');
+        statElem.innerText = `⏳ Töltés... #${currentSentenceIdx + 1}/${ttsSentences.length}`;
+      }
 
-      if (cachedBlob && cachedBlob.size > 100) {
-        if (sessionToken !== currentTTSSessionToken || !isSpeaking) return;
+      const blob = await getOrFetchAudioBlob(textToSay, voiceCode);
+
+      if (sessionToken !== currentTTSSessionToken || !isSpeaking) return;
+
+      if (blob && blob.size > 100) {
         if (currentAudioBlobUrl) {
           URL.revokeObjectURL(currentAudioBlobUrl);
         }
-        currentAudioBlobUrl = URL.createObjectURL(cachedBlob);
+        currentAudioBlobUrl = URL.createObjectURL(blob);
         activePlayer.src = currentAudioBlobUrl;
         setupPlayerEventsAndPlay(activePlayer, onEndedCallback, sessionToken, voiceName, textToSay);
         prepareStandbyAudio(currentSentenceIdx + 1, voiceCode);
         return;
       }
 
-      // 4. In-Memory Streaming Lekérés a Szerverről (Edge-TTS ~150ms)
-      const baseUrl = getEffectiveServerUrl();
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 8000);
-        const endpointUrl = `${baseUrl}/api/tts?text=${encodeURIComponent(textToSay)}&voice=${encodeURIComponent(voiceName)}&speed=${encodeURIComponent(ttsRate)}`;
-        const response = await fetch(endpointUrl, { signal: controller.signal });
-        clearTimeout(timeoutId);
-
-        if (response && response.ok) {
-          const blob = await response.blob();
-          if (sessionToken !== currentTTSSessionToken || !isSpeaking) return;
-
-          dbPutAudioCache(cacheKey, blob, textToSay);
-
-          if (currentAudioBlobUrl) {
-            URL.revokeObjectURL(currentAudioBlobUrl);
-          }
-          currentAudioBlobUrl = URL.createObjectURL(blob);
-          activePlayer.src = currentAudioBlobUrl;
-          setupPlayerEventsAndPlay(activePlayer, onEndedCallback, sessionToken, voiceName, textToSay);
-          prepareStandbyAudio(currentSentenceIdx + 1, voiceCode);
-          return;
-        }
-      } catch(err) {
-        logApp("EDGE_TTS_BACKEND_ERR", `Edge-TTS szerver hiba (${baseUrl}), átváltás rendszerhangra`, err);
-      }
-
-      if (sessionToken !== currentTTSSessionToken || !isSpeaking) return;
-
-      // 5. Fallback helyi rendszerhangra ha hálózati hiba történne
+      // 3. Fallback helyi rendszerhangra ha semmi sem érkezett vissza
       const isMaleVoice = voiceName.includes('Tamas') || voiceName.includes('Guy');
       logApp("EDGE_SYNTH_FALLBACK", `Safari/Helyi hang szintézis: ${voiceName}`);
       const voiceElem = document.getElementById('bottom-voice-name');
@@ -2449,14 +2451,23 @@
 
       player.onplaying = () => {
         hasStartedPlaying = true;
+        const dur = player.duration;
+        clearTimeout(playbackSafetyTimeout);
+        if (dur > 0 && isFinite(dur)) {
+          const watchdogMs = Math.max(3500, ((dur / ttsRate) * 1000) + 2000);
+          playbackSafetyTimeout = setTimeout(() => {
+            logApp("TTS_SAFETY_TIMEOUT", "Watchdog automatikus léptetés lejátszás végénél...");
+            safeEnd();
+          }, watchdogMs);
+        }
       };
 
       player.onloadedmetadata = () => {
         if (sessionToken !== currentTTSSessionToken) return;
         const dur = player.duration;
-        if (dur > 0 && isFinite(dur)) {
+        if (dur > 0 && isFinite(dur) && hasStartedPlaying) {
           clearTimeout(playbackSafetyTimeout);
-          const watchdogMs = Math.max(3000, ((dur / ttsRate) * 1000) + 1500);
+          const watchdogMs = Math.max(3500, ((dur / ttsRate) * 1000) + 2000);
           playbackSafetyTimeout = setTimeout(() => {
             logApp("TTS_SAFETY_TIMEOUT", "Watchdog automatikus léptetés...");
             safeEnd();
@@ -2468,7 +2479,6 @@
         if (sessionToken !== currentTTSSessionToken || hasEnded || !hasStartedPlaying) return;
         const dur = player.duration;
         const curr = player.currentTime;
-        // iOS Safari & Desktop: megbízható lezárási küszöb
         if (dur > 0.3 && isFinite(dur) && curr > 0.1 && (curr >= dur - 0.10 || player.ended)) {
           safeEnd();
         }
@@ -2483,14 +2493,7 @@
         }
       };
 
-      // Kezdeti becsült biztonsági időkorlát (ha a metadata nem érkezne meg)
       clearTimeout(playbackSafetyTimeout);
-      const estSec = Math.max(5, (textToSay.length / (10 * ttsRate)) + 5);
-      playbackSafetyTimeout = setTimeout(() => {
-        if (sessionToken !== currentTTSSessionToken || hasEnded) return;
-        logApp("TTS_SAFETY_FALLBACK", "Becsült időkorlát elérve, léptetés...");
-        safeEnd();
-      }, estSec * 1000);
 
       try {
         player.currentTime = 0;
@@ -2524,25 +2527,9 @@
       if (!sentenceItem || !sentenceItem.text) return;
 
       const textToPreload = sentenceItem.text;
-      const cacheKey = getAudioCacheKey(textToPreload, voiceCode);
 
       try {
-        let blob = await dbGetAudioCache(cacheKey);
-        if (!blob || blob.size < 100) {
-          const voiceName = voiceCode.replace('edge-', '');
-          const baseUrl = getEffectiveServerUrl();
-          const endpointUrl = `${baseUrl}/api/tts?text=${encodeURIComponent(textToPreload)}&voice=${encodeURIComponent(voiceName)}&speed=${encodeURIComponent(ttsRate)}`;
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 8000);
-          const response = await fetch(endpointUrl, { signal: controller.signal });
-          clearTimeout(timeoutId);
-          if (response && response.ok) {
-            blob = await response.blob();
-            if (blob && blob.size > 100) {
-              await dbPutAudioCache(cacheKey, blob, textToPreload);
-            }
-          }
-        }
+        const blob = await getOrFetchAudioBlob(textToPreload, voiceCode);
 
         if (blob && blob.size > 100 && isSpeaking) {
           if (standbyBlobUrl) {
@@ -2607,79 +2594,11 @@
       const maxLookahead = Math.min(ttsSentences.length, startIdx + ttsBufferSize + 1);
 
       for (let i = startIdx + 1; i < maxLookahead; i++) {
-        if (i >= ttsSentences.length) break;
+        if (i >= ttsSentences.length || !isSpeaking) break;
         const sentenceItem = ttsSentences[i];
         if (!sentenceItem || !sentenceItem.text) continue;
 
-        const textToPreload = sentenceItem.text;
-        const cacheKey = getAudioCacheKey(textToPreload, voiceCode);
-
-        // Ha már folyamatban van a letöltése, ugorjuk át
-        if (inFlightPrefetches.has(cacheKey)) continue;
-
-        // Ellenőrizzük, hogy benne van-e már a gyorsítótárban
-        const cachedBlob = await dbGetAudioCache(cacheKey);
-        if (cachedBlob && cachedBlob.size > 100) continue;
-
-        // Háttérbeli lekérés indítása a pufferbe
-        inFlightPrefetches.add(cacheKey);
-        fetchAndCacheSentenceAudio(textToPreload, voiceCode, cacheKey).finally(() => {
-          inFlightPrefetches.delete(cacheKey);
-        });
-      }
-    }
-
-    async function fetchAndCacheSentenceAudio(textToSay, voiceCode, cacheKey) {
-      try {
-        if (!voiceCode.startsWith('edge-')) return;
-        const voiceName = voiceCode.replace('edge-', '');
-        const azureKey = localStorage.getItem('ebook_azure_key');
-        const azureRegion = localStorage.getItem('ebook_azure_region') || 'westeurope';
-        if (azureKey && azureKey.trim().length > 0) {
-          const rateDiff = Math.round((ttsRate - 1.0) * 100);
-          const rateStr = rateDiff >= 0 ? `+${rateDiff}%` : `${rateDiff}%`;
-          const ssml = `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='hu-HU'>` +
-            `<voice name='${voiceName}'>` +
-            `<prosody pitch='+0Hz' rate='${rateStr}' volume='+0%'>` +
-            `${escapeXml(textToSay)}` +
-            `</prosody></voice></speak>`;
-
-          const endpoint = `https://${azureRegion.trim()}.tts.speech.microsoft.com/cognitiveservices/v1`;
-          const response = await fetch(endpoint, {
-            method: 'POST',
-            headers: {
-              'Ocp-Apim-Subscription-Key': azureKey.trim(),
-              'Content-Type': 'application/ssml+xml',
-              'X-Microsoft-OutputFormat': 'audio-24khz-48kbitrate-mono-mp3',
-              'User-Agent': 'HomebookPro'
-            },
-            body: ssml
-          });
-          if (response && response.ok) {
-            const blob = await response.blob();
-            if (blob && blob.size > 100) {
-              await dbPutAudioCache(cacheKey, blob, textToSay);
-              logApp("BUFFER_PREFETCH_OK", `⚡ Azure Puffer előretöltve (${blob.size} bájt) [${voiceName}]`, { text: textToSay.substring(0, 35) });
-            }
-          }
-        } else {
-          // Edge-TTS felhős szerver pufferelés
-          const baseUrl = getEffectiveServerUrl();
-          const endpointUrl = `${baseUrl}/api/tts?text=${encodeURIComponent(textToSay)}&voice=${encodeURIComponent(voiceName)}&speed=${encodeURIComponent(ttsRate)}`;
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 8000);
-          const response = await fetch(endpointUrl, { signal: controller.signal });
-          clearTimeout(timeoutId);
-          if (response && response.ok) {
-            const blob = await response.blob();
-            if (blob && blob.size > 100) {
-              await dbPutAudioCache(cacheKey, blob, textToSay);
-              logApp("BUFFER_PREFETCH_OK", `⚡ Edge-TTS Puffer előretöltve (${blob.size} bájt) [${voiceName}]`, { text: textToSay.substring(0, 35) });
-            }
-          }
-        }
-      } catch(err) {
-        logApp("BUFFER_PREFETCH_ERR", "Puffer előretöltési hiba", err);
+        getOrFetchAudioBlob(sentenceItem.text, voiceCode).catch(() => {});
       }
     }
 
