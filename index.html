@@ -1007,6 +1007,7 @@
       populateNativeVoices();
       loadStoredSettings();
       setupSelectionListener();
+      setupUserScrollPauseListener();
 
       const storedBooks = await dbLoadAllBooks();
       if (storedBooks && storedBooks.length > 0) {
@@ -1669,6 +1670,47 @@
           popover.classList.add('hidden');
         }
       });
+    }
+
+    function setupUserScrollPauseListener() {
+      const container = document.getElementById('reader-container');
+      if (!container) return;
+
+      let touchStartY = 0;
+      let lastPauseToast = 0;
+
+      container.addEventListener('touchstart', (e) => {
+        if (e.touches && e.touches.length > 0) {
+          touchStartY = e.touches[0].clientY;
+        }
+      }, { passive: true });
+
+      container.addEventListener('touchmove', (e) => {
+        if (isSpeaking && !isProgrammaticScroll) {
+          if (e.touches && e.touches.length > 0) {
+            const diff = Math.abs(e.touches[0].clientY - touchStartY);
+            if (diff > 18) { // Érdemi kézi elmozdulás
+              pauseTTS();
+              const now = Date.now();
+              if (now - lastPauseToast > 3000) {
+                showToast("Kézi görgetés: felolvasás szüneteltetve ⏸");
+                lastPauseToast = now;
+              }
+            }
+          }
+        }
+      }, { passive: true });
+
+      container.addEventListener('wheel', (e) => {
+        if (isSpeaking && !isProgrammaticScroll && Math.abs(e.deltaY) > 8) {
+          pauseTTS();
+          const now = Date.now();
+          if (now - lastPauseToast > 3000) {
+            showToast("Kézi görgetés: felolvasás szüneteltetve ⏸");
+            lastPauseToast = now;
+          }
+        }
+      }, { passive: true });
     }
 
     async function translateSelectedText() {
